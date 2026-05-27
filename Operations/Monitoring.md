@@ -78,18 +78,20 @@ Blocking is one of the most common performance complaints. A single long-running
 ### Quick Check
 
 ```sql
+SET NOCOUNT ON;
+
 -- Find current blocking chains
 SELECT
-    r.session_id AS BlockedSession,
-    r.blocking_session_id AS BlockingSession,
-    r.wait_type,
-    r.wait_time / 1000.0 AS WaitTimeSec,
-    DB_NAME(r.database_id) AS DatabaseName,
-    t.text AS BlockedQuery
-FROM sys.dm_exec_requests r
-OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) t
-WHERE r.blocking_session_id > 0
-ORDER BY r.wait_time DESC;
+    [r].[session_id]            AS BlockedSession,
+    [r].[blocking_session_id]   AS BlockingSession,
+    [r].[wait_type],
+    [r].[wait_time] / 1000.0    AS WaitTimeSec,
+    DB_NAME([r].[database_id])  AS DatabaseName,
+    [t].[text]                  AS BlockedQuery
+FROM [sys].[dm_exec_requests]  AS r
+OUTER APPLY [sys].[dm_exec_sql_text]([r].[sql_handle]) AS t
+WHERE [r].[blocking_session_id] > 0
+ORDER BY [r].[wait_time] DESC;
 ```
 
 ```powershell
@@ -118,15 +120,17 @@ For deeper analysis of blocking patterns over time, refer to [Brent Ozar's block
 Wait statistics tell you what SQL Server is spending its time waiting on. They're the starting point for any performance investigation.
 
 ```sql
+SET NOCOUNT ON;
+
 -- Top 10 waits by total wait time (excludes idle/background waits)
 SELECT TOP 10
-    wait_type,
-    waiting_tasks_count,
-    wait_time_ms / 1000.0 AS wait_time_sec,
-    signal_wait_time_ms / 1000.0 AS signal_wait_sec,
-    (wait_time_ms - signal_wait_time_ms) / 1000.0 AS resource_wait_sec
-FROM sys.dm_os_wait_stats
-WHERE wait_type NOT IN (
+    [wait_type],
+    [waiting_tasks_count],
+    [wait_time_ms] / 1000.0                             AS wait_time_sec,
+    [signal_wait_time_ms] / 1000.0                      AS signal_wait_sec,
+    ([wait_time_ms] - [signal_wait_time_ms]) / 1000.0   AS resource_wait_sec
+FROM [sys].[dm_os_wait_stats]
+WHERE [wait_type] NOT IN (
     'SLEEP_TASK', 'BROKER_TASK_STOP', 'BROKER_TO_FLUSH',
     'SQLTRACE_BUFFER_FLUSH', 'CLR_AUTO_EVENT', 'CLR_MANUAL_EVENT',
     'LAZYWRITER_SLEEP', 'CHECKPOINT_QUEUE', 'WAITFOR',
@@ -137,7 +141,7 @@ WHERE wait_type NOT IN (
     'ONDEMAND_TASK_QUEUE', 'QDS_CLEANUP_STALE_QUERIES_TASK_MAIN_LOOP_SLEEP',
     'QDS_PERSIST_TASK_MAIN_LOOP_SLEEP'
 )
-ORDER BY wait_time_ms DESC;
+ORDER BY [wait_time_ms] DESC;
 ```
 
 ```powershell
@@ -190,18 +194,21 @@ Get-DbaRunningJob -SqlInstance SqlServer01
 ```
 
 ```sql
+SET NOCOUNT ON;
+
 -- Failed jobs in the last 24 hours
 SELECT
-    j.name AS JobName,
-    h.step_name AS StepName,
-    h.run_date,
-    h.run_time,
-    h.message
-FROM msdb.dbo.sysjobhistory h
-INNER JOIN msdb.dbo.sysjobs j ON h.job_id = j.job_id
-WHERE h.run_status = 0  -- 0 = Failed
-    AND CAST(CAST(h.run_date AS CHAR(8)) AS DATE) >= DATEADD(DAY, -1, CAST(GETDATE() AS DATE))
-ORDER BY h.run_date DESC, h.run_time DESC;
+    [j].[name]      AS JobName,
+    [h].[step_name] AS StepName,
+    [h].[run_date],
+    [h].[run_time],
+    [h].[message]
+FROM [msdb].[dbo].[sysjobhistory]   AS h
+JOIN [msdb].[dbo].[sysjobs]         AS j
+    ON [h].[job_id] = [j].[job_id]
+WHERE [h].[run_status] = 0  -- 0 = Failed
+  AND CAST(CAST([h].[run_date] AS CHAR(8)) AS DATE) >= DATEADD(DAY, -1, CAST(GETDATE() AS DATE))
+ORDER BY [h].[run_date] DESC, [h].[run_time] DESC;
 ```
 
 ## Disk Space Monitoring
@@ -226,18 +233,20 @@ Get-DbaDbFile -SqlInstance SqlServer01 |
 ```
 
 ```sql
+SET NOCOUNT ON;
+
 -- Database file sizes and free space
 SELECT
-    DB_NAME(database_id) AS DatabaseName,
-    name AS LogicalName,
-    type_desc,
-    size / 128.0 AS SizeMB,
-    FILEPROPERTY(name, 'SpaceUsed') / 128.0 AS UsedMB,
-    (size - FILEPROPERTY(name, 'SpaceUsed')) / 128.0 AS FreeMB,
-    growth,
-    CASE is_percent_growth WHEN 1 THEN 'Percent' ELSE 'MB' END AS GrowthType
-FROM sys.master_files
-ORDER BY DatabaseName, type_desc;
+    DB_NAME([database_id])                                  AS DatabaseName,
+    [name]                                                  AS LogicalName,
+    [type_desc],
+    [size] / 128.0                                          AS SizeMB,
+    FILEPROPERTY([name], 'SpaceUsed') / 128.0               AS UsedMB,
+    ([size] - FILEPROPERTY([name], 'SpaceUsed')) / 128.0    AS FreeMB,
+    [growth],
+    CASE [is_percent_growth] WHEN 1 THEN 'Percent' ELSE 'MB' END AS GrowthType
+FROM [sys].[master_files]
+ORDER BY DatabaseName, [type_desc];
 ```
 
 ## Database Health Checks
@@ -273,20 +282,27 @@ For environments using log shipping as a DR strategy, monitor the backup, copy, 
 Get-DbaDbLogShipError -SqlInstance SecondaryServer01
 
 # Monitor restore latency
-Invoke-DbaQuery -SqlInstance SecondaryServer01 -Database msdb -Query @"
+$splatLogShip = @{
+    SqlInstance = 'SecondaryServer01'
+    Database    = 'msdb'
+    Query       = @'
+SET NOCOUNT ON;
+
 SELECT
-    secondary_database,
-    last_copied_file,
-    last_copied_date,
-    last_restored_file,
-    last_restored_date,
-    last_restored_latency
-FROM dbo.log_shipping_monitor_secondary
-ORDER BY last_restored_latency DESC;
-"@
+    [secondary_database],
+    [last_copied_file],
+    [last_copied_date],
+    [last_restored_file],
+    [last_restored_date],
+    [last_restored_latency]
+FROM [dbo].[log_shipping_monitor_secondary]
+ORDER BY [last_restored_latency] DESC;
+'@
+}
+Invoke-DbaQuery @splatLogShip
 ```
 
-Watch for `last_restored_latency` climbing beyond the configured alert threshold. See [Log Shipping Setup](LogShipping.md#monitoring-log-shipping) for additional detail.
+Watch for `last_restored_latency` climbing beyond the configured alert threshold. See [Log Shipping Setup](../Disaster-Recovery/LogShipping.md#monitoring-log-shipping) for additional detail.
 
 ## Proactive Alerting
 
@@ -295,14 +311,14 @@ Don't wait for someone to notice a problem. Configure SQL Agent alerts for criti
 ```powershell
 # Create alerts for critical severity errors (severity 17-25)
 17..25 | ForEach-Object {
-    $params = @{
-        SqlInstance  = 'SqlServer01'
-        Alert        = "Severity $_ Error"
-        Severity     = $_
-        NotifyMethod = 'NotifyEmail'
-        NotifyOperator = 'DBA-Team'
+    $splatAlert = @{
+        SqlInstance     = 'SqlServer01'
+        Alert           = "Severity $_ Error"
+        Severity        = $_
+        NotifyMethod    = 'NotifyEmail'
+        NotifyOperator  = 'DBA-Team'
     }
-    New-DbaAgentAlert @params
+    New-DbaAgentAlert @splatAlert
 }
 
 # Verify alerts are configured

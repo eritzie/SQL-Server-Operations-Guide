@@ -91,7 +91,14 @@ WITH
 ```
 
 ```powershell
-Backup-DbaDatabase -SqlInstance SecondaryServer01 -Database DatabaseName -Path X:\Backups -Type Full -CompressBackup
+$splatBackup = @{
+    SqlInstance    = 'SecondaryServer01'
+    Database       = 'DatabaseName'
+    Path           = 'X:\Backups'
+    Type           = 'Full'
+    CompressBackup = $true
+}
+Backup-DbaDatabase @splatBackup
 ```
 
 4. Restore the databases on the primary server:
@@ -105,7 +112,12 @@ WITH
 ```
 
 ```powershell
-Restore-DbaDatabase -SqlInstance PrimaryServer01 -Path X:\Backups\DatabaseName_full.bak -WithReplace
+$splatRestore = @{
+    SqlInstance = 'PrimaryServer01'
+    Path        = 'X:\Backups\DatabaseName_full.bak'
+    WithReplace = $true
+}
+Restore-DbaDatabase @splatRestore
 ```
 
 5. Enable backup SQL Agent jobs on the primary server.
@@ -122,14 +134,28 @@ The [`Copy-DbaDatabase`](https://docs.dbatools.io/#Copy-DbaDatabase) command han
 
 ```powershell
 # Copy all databases
-Copy-DbaDatabase -Source SecondaryServer01 -Destination PrimaryServer01 `
-    -BackupRestore -SharedPath '\\PrimaryServer01\Backups' `
-    -AllDatabases -NoCopyOnly -Force
+$splatCopyAll = @{
+    Source        = 'SecondaryServer01'
+    Destination   = 'PrimaryServer01'
+    BackupRestore = $true
+    SharedPath    = '\\PrimaryServer01\Backups'
+    AllDatabases  = $true
+    NoCopyOnly    = $true
+    Force         = $true
+}
+Copy-DbaDatabase @splatCopyAll
 
 # Copy a single database
-Copy-DbaDatabase -Source SecondaryServer01 -Destination PrimaryServer01 `
-    -BackupRestore -SharedPath '\\PrimaryServer01\Backups' `
-    -Database DatabaseName -NoCopyOnly -Force
+$splatCopyOne = @{
+    Source        = 'SecondaryServer01'
+    Destination   = 'PrimaryServer01'
+    BackupRestore = $true
+    SharedPath    = '\\PrimaryServer01\Backups'
+    Database      = 'DatabaseName'
+    NoCopyOnly    = $true
+    Force         = $true
+}
+Copy-DbaDatabase @splatCopyOne
 ```
 
 3. Enable backup SQL Agent jobs on the primary server:

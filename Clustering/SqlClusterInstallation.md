@@ -60,11 +60,11 @@ Enter the static IP address and subnet mask for the SQL Server FCI. This IP must
 
 Use a **domain service account** for the SQL Server Database Engine and SQL Server Agent services. Both should use the same account unless security requirements dictate separation.
 
-Check **Grant Perform Volume Maintenance Task** to enable Instant File Initialization — see [Performance Practices](PerformancePractices.md#instant-file-initialization) for why this matters.
+Check **Grant Perform Volume Maintenance Task** to enable Instant File Initialization — see [Performance Practices](../Performance/PerformancePractices.md#instant-file-initialization) for why this matters.
 
 ### Server Configuration
 
-Select **Mixed Mode** authentication and set a strong SA password. Even though the SA account should be disabled post-installation (see [Security Practices](Security.md)), a strong password is required during setup.
+Select **Mixed Mode** authentication and set a strong SA password. Even though the SA account should be disabled post-installation (see [Security Practices](../Security/Security.md)), a strong password is required during setup.
 
 Add the SQL Server service account and the **Database Admins** security group to the SQL Server Administrators list.
 
@@ -85,7 +85,7 @@ On the TempDB tab:
 
 - **Data directories:** Point to the TempDB disk (T:\TempDB01). Remove the default directory if it points elsewhere.
 - **Log directory:** Point to the Log disk (I:\Log01). TempDB log files go with the other log files, not on the TempDB data disk.
-- **Number of files:** The installer will default to a number based on processor count (up to 8). Accept this or adjust per [Performance Practices](PerformancePractices.md#tempdb-configuration).
+- **Number of files:** The installer will default to a number based on processor count (up to 8). Accept this or adjust per [Performance Practices](../Performance/PerformancePractices.md#tempdb-configuration).
 
 After reviewing the summary, click **Install**. At completion, verify in Failover Cluster Manager that SQL Server (MSSQLSERVER) appears under Roles and all dependencies show as **Online**.
 
@@ -126,7 +126,7 @@ Test-DbaMaxMemory -SqlInstance SqlFciName
 Set-DbaMaxMemory -SqlInstance SqlFciName -Max <RecommendedValueMB>
 ```
 
-Leave at least **15% of total memory for the OS**. If SSRS or SSIS are installed on the same cluster, increase that to **20–25%**. See [Performance Practices](PerformancePractices.md#max-server-memory) for details.
+Leave at least **15% of total memory for the OS**. If SSRS or SSIS are installed on the same cluster, increase that to **20–25%**. See [Performance Practices](../Performance/PerformancePractices.md#max-server-memory) for details.
 
 ### TempDB File Sizing
 
@@ -137,7 +137,7 @@ Pre-allocate TempDB data files to equal sizes that consume most of the TempDB di
 Test-DbaTempDbConfig -SqlInstance SqlFciName | Select-Object * | Out-GridView
 ```
 
-All data files must be the same size with the same autogrowth increment. See [Performance Practices](PerformancePractices.md#tempdb-configuration) for the full set of recommendations.
+All data files must be the same size with the same autogrowth increment. See [Performance Practices](../Performance/PerformancePractices.md#tempdb-configuration) for the full set of recommendations.
 
 ### MAXDOP and Cost Threshold for Parallelism
 
@@ -149,7 +149,12 @@ Test-DbaMaxDop -SqlInstance SqlFciName | Select-Object *
 Set-DbaMaxDop -SqlInstance SqlFciName -MaxDop <RecommendedValue>
 
 # Set Cost Threshold for Parallelism (default of 5 is too low)
-Set-DbaSpConfigure -SqlInstance SqlFciName -Name CostThresholdForParallelism -Value 50
+$splatCtfp = @{
+    SqlInstance = 'SqlFciName'
+    Name        = 'CostThresholdForParallelism'
+    Value       = 50
+}
+Set-DbaSpConfigure @splatCtfp
 ```
 
 ### Install Utility Stored Procedures
@@ -168,8 +173,14 @@ Install-DbaFirstResponderKit -SqlInstance SqlFciName -Database master
 Install-DbaWhoIsActive -SqlInstance SqlFciName -Database master
 
 # Install Ola Hallengren's Maintenance Solution
-Install-DbaMaintenanceSolution -SqlInstance SqlFciName -Database master `
-    -InstallJobs -CleanupTime 168 -LogToTable
+$splatMaint = @{
+    SqlInstance = 'SqlFciName'
+    Database    = 'master'
+    InstallJobs = $true
+    CleanupTime = 168
+    LogToTable  = $true
+}
+Install-DbaMaintenanceSolution @splatMaint
 ```
 
 ### Disable the SA Account
@@ -189,18 +200,10 @@ Run a comprehensive check to confirm everything is configured correctly:
 
 ```powershell
 # Overall instance configuration audit
-$results = @()
-
-# Memory
-$results += Test-DbaMaxMemory -SqlInstance SqlFciName
-# MAXDOP
-$results += Test-DbaMaxDop -SqlInstance SqlFciName
-# TempDB
-$results += Test-DbaTempDbConfig -SqlInstance SqlFciName
-# Disk allocation
-$results += Test-DbaDiskAllocation -ComputerName ClusterNode01
-
-$results | Out-GridView
+Test-DbaMaxMemory      -SqlInstance SqlFciName | Out-GridView -Title 'Memory'
+Test-DbaMaxDop         -SqlInstance SqlFciName | Out-GridView -Title 'MAXDOP'
+Test-DbaTempDbConfig   -SqlInstance SqlFciName | Out-GridView -Title 'TempDB'
+Test-DbaDiskAllocation -ComputerName ClusterNode01 | Out-GridView -Title 'Disk'
 
 # Connectivity test
 Test-DbaConnection -SqlInstance SqlFciName

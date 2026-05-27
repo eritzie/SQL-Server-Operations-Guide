@@ -56,6 +56,8 @@ Configuring SQL Server's max memory is a critical performance setting. Set it to
 The following query checks the ring buffer for memory pressure events:
 
 ```sql
+SET NOCOUNT ON;
+
 SELECT
     EventTime,
     record.value('(/Record/ResourceMonitor/Notification)[1]', 'varchar(max)') AS [Type],
@@ -65,8 +67,8 @@ FROM (
     SELECT
         DATEADD(ss, (-1 * ((cpu_ticks / CONVERT(float, (cpu_ticks / ms_ticks))) - [timestamp]) / 1000), GETDATE()) AS EventTime,
         CONVERT(xml, record) AS record
-    FROM sys.dm_os_ring_buffers
-    CROSS JOIN sys.dm_os_sys_info
+    FROM [sys].[dm_os_ring_buffers]
+    CROSS JOIN [sys].[dm_os_sys_info]
     WHERE ring_buffer_type = 'RING_BUFFER_RESOURCE_MONITOR'
 ) AS tab
 ORDER BY EventTime DESC;
@@ -150,22 +152,24 @@ Get-DbaWaitStatistic -SqlInstance SqlServer01 |
 If query performance issues persist, the following query can help identify the specific sessions experiencing parallelism waits:
 
 ```sql
+SET NOCOUNT ON;
+
 SELECT
-    er.session_id,
-    es.program_name,
-    est.text,
-    er.database_id,
-    eqp.query_plan,
-    er.cpu_time
-FROM sys.dm_exec_requests er
-INNER JOIN sys.dm_exec_sessions es
-    ON es.session_id = er.session_id
-OUTER APPLY sys.dm_exec_sql_text(er.sql_handle) est
-OUTER APPLY sys.dm_exec_query_plan(er.plan_handle) eqp
+    [er].[session_id],
+    [es].[program_name],
+    [est].[text],
+    [er].[database_id],
+    [eqp].[query_plan],
+    [er].[cpu_time]
+FROM [sys].[dm_exec_requests] AS er
+INNER JOIN [sys].[dm_exec_sessions] AS es
+    ON [es].[session_id] = [er].[session_id]
+OUTER APPLY [sys].[dm_exec_sql_text]([er].[sql_handle]) AS est
+OUTER APPLY [sys].[dm_exec_query_plan]([er].[plan_handle]) AS eqp
 WHERE
-    es.is_user_process = 1
-    AND er.last_wait_type = N'CXPACKET'
-ORDER BY er.session_id;
+    [es].[is_user_process] = 1
+    AND [er].[last_wait_type] = N'CXPACKET'
+ORDER BY [er].[session_id];
 ```
 
 > **Note:** The wait type to look for is `CXPACKET` (or `CXCONSUMER` on SQL Server 2017+), which indicates parallelism waits. The original version of this document referenced `SOS_SCHEDULER_YIELD`, which indicates CPU pressure from scheduler yielding — related but a different issue. `CXPACKET` waits are the direct indicator that CTFP tuning may help.
@@ -222,16 +226,18 @@ Fragmentation accumulates through data modifications (INSERT, UPDATE, DELETE) as
 Check fragmentation for a specific table:
 
 ```sql
+SET NOCOUNT ON;
+
 SELECT
-    index_type_desc,
-    alloc_unit_type_desc,
-    index_depth,
-    index_level,
-    avg_fragmentation_in_percent,
-    fragment_count,
-    avg_fragment_size_in_pages,
-    page_count
-FROM sys.dm_db_index_physical_stats(
+    [index_type_desc],
+    [alloc_unit_type_desc],
+    [index_depth],
+    [index_level],
+    [avg_fragmentation_in_percent],
+    [fragment_count],
+    [avg_fragment_size_in_pages],
+    [page_count]
+FROM [sys].[dm_db_index_physical_stats](
     DB_ID(N'DatabaseName'),
     OBJECT_ID(N'SchemaName.TableName'),
     NULL,
@@ -260,7 +266,12 @@ WHERE ips.page_count > 1000
 ORDER BY ips.avg_fragmentation_in_percent DESC;
 "@
 
-Invoke-DbaQuery -SqlInstance SqlServer01 -Database DatabaseName -Query $query | Out-GridView
+$splatFrag = @{
+    SqlInstance = 'SqlServer01'
+    Database    = 'DatabaseName'
+    Query       = $query
+}
+Invoke-DbaQuery @splatFrag | Out-GridView
 ```
 
 > **Note:** There is no dedicated dbatools command for index fragmentation reporting. The DMV query is the right tool here — wrapping it with `Invoke-DbaQuery` keeps it in the PowerShell pipeline if you're auditing multiple instances.

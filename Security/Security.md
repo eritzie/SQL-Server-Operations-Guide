@@ -67,6 +67,96 @@ Get-DbaLogin -SqlInstance SqlServer01 -Type Windows |
     Select-Object Name, LoginType, CreateDate, LastLogin, HasAccess, IsDisabled
 ```
 
+### Group Managed Service Accounts (gMSA)
+
+gMSA is the recommended account type for the SQL Server service itself — the account SQL Server Engine, Agent, and SSAS run as. AD manages the password automatically, rotating it every 30 days without any intervention. This eliminates service disruptions from expired passwords and removes the need to store service account passwords anywhere.
+
+This section covers SQL Server service accounts. Application accounts that connect to SQL Server (covered above) can also be gMSA, but the primary benefit is for the service accounts.
+
+**Prerequisites:**
+- Windows Server 2012 R2 or later domain controllers
+- KDS root key configured in the forest — one-time setup, requires domain admin
+- An AD security group that controls which computer accounts can retrieve the gMSA password
+
+**Supported and unsupported services:**
+
+| SQL Server Service | gMSA Supported |
+|---|---|
+| SQL Server Engine (standalone instance) | Yes |
+| SQL Server Engine (Availability Group node) | Yes |
+| SQL Server Agent | Yes |
+| SQL Server Analysis Services | Yes |
+| SQL Server Integration Services | Yes |
+| SQL Server Browser | No |
+| SQL Server FCI service account | **No** — requires a traditional domain account |
+| SQL Server Reporting Services | **No** — RS Configuration Manager does not support gMSA |
+
+**FCI limitation:** Failover Cluster Instances require a traditional domain account. The clustering service must authenticate during failover transitions using credentials that gMSA cannot provide in that context.
+
+**SSRS limitation:** The Reporting Services Configuration Manager does not support gMSA as the RS service account. Changing the service to gMSA via Services.msc will be overwritten the next time RS Configuration Manager applies a setting change. Use a dedicated domain account for SSRS — see [SSRS Operations](../Operations/SSRS.md).
+
+**Setup:**
+
+```powershell
+# One-time per forest: create the KDS root key (run on a domain controller, domain admin required)
+# -EffectiveImmediately bypasses the 10-hour propagation delay — acceptable in lab, not production
+Add-KdsRootKey -EffectiveTime ((Get-Date).AddHours(-10))
+
+# Create an AD group to control which servers can retrieve this gMSA's password
+New-ADGroup -Name 'gMSA-SQLServer01' -GroupScope DomainLocal -Path 'OU=ServiceAccounts,DC=corp,DC=example,DC=com'
+Add-ADGroupMember -Identity 'gMSA-SQLServer01' -Members 'SQLSERVER01$'   # computer account, note the $
+
+# Create the gMSA
+$splatGmsa = @{
+    Name                                         = 'svc-sql01'
+    SamAccountName                               = 'svc-sql01'
+    DNSHostName                                  = 'svc-sql01.corp.example.com'
+    PrincipalsAllowedToRetrieveManagedPassword   = 'gMSA-SQLServer01'
+    Path                                         = 'OU=ServiceAccounts,DC=corp,DC=example,DC=com'
+    Enabled                                      = $true
+}
+New-ADServiceAccount @splatGmsa
+
+# Install the gMSA on the target SQL Server (run on the SQL Server, not a DC)
+Install-ADServiceAccount -Identity 'svc-sql01'
+
+# Verify the gMSA can be retrieved by this server
+Test-ADServiceAccount -Identity 'svc-sql01'
+```
+
+**Configure SQL Server to use the gMSA:**
+
+Use SQL Server Configuration Manager → SQL Server Services → right-click the service → Properties → Log On. Enter `DOMAIN\svc-sql01$` (trailing `$` is required). Leave the password fields blank — the system retrieves the password automatically.
+
+```powershell
+# Alternatively, via dbatools
+$splatSvc = @{
+    ComputerName   = 'SqlServer01'
+    ServiceName    = 'MSSQLSERVER'
+    ServiceAccount = 'CORP\svc-sql01$'
+    SecurePassword = (New-Object System.Security.SecureString)
+    EnableException = $true
+}
+Set-DbaService @splatSvc
+```
+
+**Replication and linked server considerations:**
+
+When SQL Server Engine runs as a gMSA, distributed operations that use the current security context — linked server connections configured as "Be made using the login's current security context," and replication agent connections — authenticate as the gMSA. Two additional steps are required:
+
+1. **Register SPNs for the gMSA** — without correct SPNs, Kerberos authentication fails and connections fall back to NTLM or fail entirely:
+
+```powershell
+# Run on a domain controller or with domain admin rights
+# Replace port and FQDN to match the environment
+setspn -S MSSQLSvc/SqlServer01.corp.example.com:1433 CORP\svc-sql01$
+setspn -S MSSQLSvc/SqlServer01:1433 CORP\svc-sql01$
+```
+
+2. **Configure Kerberos constrained delegation** — if the linked server or replication distributor is on a different server, configure constrained delegation on the gMSA object in Active Directory (ADUC → gMSA account → Delegation tab → Trust this account for delegation to specified services only). Unconstrained delegation should be avoided — it allows the account to impersonate any service, which is a significant attack surface.
+
+Replication agents (Distribution Agent, Snapshot Agent, Merge Agent) that run as separate Windows processes can themselves use gMSA accounts. Assign the appropriate gMSA to each agent's process account in the replication job step security settings.
+
 ### Windows Security Groups
 
 Use Active Directory security groups rather than granting permissions to individual user accounts. This simplifies permission management and eliminates the need to clean up SQL Server logins when employees leave — removing the user from the AD group revokes their access automatically.

@@ -74,16 +74,40 @@ The default file naming convention produces files like `ServerName_DatabaseName_
 
 ```powershell
 # Full Copy-Only backup to local disk
-Backup-DbaDatabase -SqlInstance ServerName01 -Database DatabaseName `
-    -Path X:\Backups\Full -Type Full -CopyOnly -CompressBackup -Checksum
+$splatFull = @{
+    SqlInstance    = 'ServerName01'
+    Database       = 'DatabaseName'
+    Path           = 'X:\Backups\Full'
+    Type           = 'Full'
+    CopyOnly       = $true
+    CompressBackup = $true
+    Checksum       = $true
+}
+Backup-DbaDatabase @splatFull
 
-# Full Copy-Only backup to network share
-Backup-DbaDatabase -SqlInstance ServerName01 -Database DatabaseName `
-    -Path \\BackupShare -Type Full -CopyOnly -CompressBackup -Checksum
+# Full Copy-Only backup to network share — change Path only
+$splatFullNet = @{
+    SqlInstance    = 'ServerName01'
+    Database       = 'DatabaseName'
+    Path           = '\\BackupShare'
+    Type           = 'Full'
+    CopyOnly       = $true
+    CompressBackup = $true
+    Checksum       = $true
+}
+Backup-DbaDatabase @splatFullNet
 
 # Backup all user databases
-Backup-DbaDatabase -SqlInstance ServerName01 -ExcludeSystem `
-    -Path X:\Backups\Full -Type Full -CopyOnly -CompressBackup -Checksum
+$splatFullAll = @{
+    SqlInstance    = 'ServerName01'
+    ExcludeSystem  = $true
+    Path           = 'X:\Backups\Full'
+    Type           = 'Full'
+    CopyOnly       = $true
+    CompressBackup = $true
+    Checksum       = $true
+}
+Backup-DbaDatabase @splatFullAll
 ```
 
 ### Differential Backups
@@ -102,8 +126,15 @@ WITH
 ```
 
 ```powershell
-Backup-DbaDatabase -SqlInstance ServerName01 -Database DatabaseName `
-    -Path X:\Backups\Diff -Type Differential -CompressBackup -Checksum
+$splatDiff = @{
+    SqlInstance    = 'ServerName01'
+    Database       = 'DatabaseName'
+    Path           = 'X:\Backups\Diff'
+    Type           = 'Differential'
+    CompressBackup = $true
+    Checksum       = $true
+}
+Backup-DbaDatabase @splatDiff
 ```
 
 > **Note:** Do not use `COPY_ONLY` with differential backups — it would produce a differential that is not based on the current differential base and would be unusable for restore chains.
@@ -123,8 +154,15 @@ WITH
 ```
 
 ```powershell
-Backup-DbaDatabase -SqlInstance ServerName01 -Database DatabaseName `
-    -Path X:\Backups\Log -Type Log -CompressBackup -Checksum
+$splatLog = @{
+    SqlInstance    = 'ServerName01'
+    Database       = 'DatabaseName'
+    Path           = 'X:\Backups\Log'
+    Type           = 'Log'
+    CompressBackup = $true
+    Checksum       = $true
+}
+Backup-DbaDatabase @splatLog
 ```
 
 > **Note:** If log shipping is configured, manual log backups (without `COPY_ONLY`) will break the log chain. Use `COPY_ONLY` for manual log backups in log-shipped environments:
@@ -141,8 +179,16 @@ WITH
 ```
 
 ```powershell
-Backup-DbaDatabase -SqlInstance ServerName01 -Database DatabaseName `
-    -Path X:\Backups\Log -Type Log -CopyOnly -CompressBackup -Checksum
+$splatLogCopyOnly = @{
+    SqlInstance    = 'ServerName01'
+    Database       = 'DatabaseName'
+    Path           = 'X:\Backups\Log'
+    Type           = 'Log'
+    CopyOnly       = $true
+    CompressBackup = $true
+    Checksum       = $true
+}
+Backup-DbaDatabase @splatLogCopyOnly
 ```
 
 ## Backup Verification
@@ -211,13 +257,22 @@ Restore-DbaDatabase -SqlInstance ServerName01 -Path X:\Backups\Full\DatabaseName
 # Restore from network share
 Restore-DbaDatabase -SqlInstance ServerName01 -Path \\BackupShare\DatabaseName.bak
 
-# Restore with file relocation (dbatools handles this automatically
-# by mapping files to the instance's default data and log directories)
-Restore-DbaDatabase -SqlInstance ServerName01 -Path X:\Backups\Full\DatabaseName.bak -UseDestinationDefaultDirectories
+# Restore with automatic file relocation to instance default directories
+$splatRestore = @{
+    SqlInstance                      = 'ServerName01'
+    Path                             = 'X:\Backups\Full\DatabaseName.bak'
+    UseDestinationDefaultDirectories = $true
+}
+Restore-DbaDatabase @splatRestore
 
 # Restore with a new database name (useful for dev/test copies)
-Restore-DbaDatabase -SqlInstance ServerName01 -Path X:\Backups\Full\DatabaseName.bak `
-    -DatabaseName DatabaseName_Copy -UseDestinationDefaultDirectories
+$splatRestoreCopy = @{
+    SqlInstance                      = 'ServerName01'
+    Path                             = 'X:\Backups\Full\DatabaseName.bak'
+    DatabaseName                     = 'DatabaseName_Copy'
+    UseDestinationDefaultDirectories = $true
+}
+Restore-DbaDatabase @splatRestoreCopy
 ```
 
 ### Point-in-Time Restore
@@ -253,9 +308,14 @@ WITH
 
 ```powershell
 # dbatools can handle the full restore chain with point-in-time
-Restore-DbaDatabase -SqlInstance ServerName01 `
-    -Path X:\Backups\Full\DatabaseName.bak, X:\Backups\Diff\DatabaseName_diff.bak, X:\Backups\Log\DatabaseName_log.trn `
-    -RestoreTime (Get-Date '2026-03-30T14:30:00')
+$splatPit = @{
+    SqlInstance = 'ServerName01'
+    Path        = 'X:\Backups\Full\DatabaseName.bak',
+                  'X:\Backups\Diff\DatabaseName_diff.bak',
+                  'X:\Backups\Log\DatabaseName_log.trn'
+    RestoreTime = (Get-Date '2026-03-30T14:30:00')
+}
+Restore-DbaDatabase @splatPit
 ```
 
 ## Important Notes

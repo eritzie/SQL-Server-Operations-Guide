@@ -29,7 +29,7 @@ A mapped disk scheme is recommended for manageability — it uses a single drive
 | Backups | X:\ | BACKUP01 | 4KB (default) | 250GB | SQL backup files |
 | Quorum | Q:\ | Quorum | 4KB (default) | 2GB | Cluster quorum witness |
 
-The 64KB block size for Data, Log, and TempDB disks aligns with SQL Server's extent size (8 pages × 8KB = 64KB). See the [Performance Practices](PerformancePractices.md#disk-configurations) document for a detailed explanation of why this matters.
+The 64KB block size for Data, Log, and TempDB disks aligns with SQL Server's extent size (8 pages × 8KB = 64KB). See the [Performance Practices](../Performance/PerformancePractices.md#disk-configurations) document for a detailed explanation of why this matters.
 
 Verify disk configuration after setup:
 
@@ -97,8 +97,13 @@ It's normal for the validation to return warnings, especially if shared storage 
 ### Create the Cluster
 
 ```powershell
-New-Cluster -Name ClusterName -Node ClusterNode01, ClusterNode02 `
-    -StaticAddress 10.0.0.50 -NoStorage
+$splatCluster = @{
+    Name          = 'ClusterName'
+    Node          = 'ClusterNode01', 'ClusterNode02'
+    StaticAddress = '10.0.0.50'
+    NoStorage     = $true
+}
+New-Cluster @splatCluster
 ```
 
 - `-StaticAddress` — the IP address for the cluster management endpoint. Use an IP on the LAN/client network, not the heartbeat network.
@@ -117,10 +122,13 @@ For a two-node cluster, use a **file share witness** or **cloud witness** (Azure
 Set-ClusterQuorum -NodeAndFileShareMajority '\\FileServer01\ClusterWitness'
 
 # Cloud witness (Azure)
-Set-ClusterQuorum -CloudWitness `
-    -AccountName 'storageaccountname' `
-    -AccessKey 'storageaccountkey' `
-    -Endpoint 'core.windows.net'
+$splatWitness = @{
+    CloudWitness = $true
+    AccountName  = 'storageaccountname'
+    AccessKey    = 'storageaccountkey'
+    Endpoint     = 'core.windows.net'
+}
+Set-ClusterQuorum @splatWitness
 ```
 
 If using a disk witness instead (requires shared storage):
@@ -175,8 +183,14 @@ These settings should be applied on **all cluster nodes** after the cluster is b
 **Disable Volume Shadow Copy (VSS)** if not actively used. VSS snapshots on cluster shared disks can cause unexpected I/O latency and disk space consumption.
 
 ```powershell
-Set-Service -Name VSS -StartupType Disabled -ComputerName ClusterNode01
-Set-Service -Name VSS -StartupType Disabled -ComputerName ClusterNode02
+foreach ($node in @('ClusterNode01', 'ClusterNode02')) {
+    $splatVss = @{
+        Name         = 'VSS'
+        StartupType  = 'Disabled'
+        ComputerName = $node
+    }
+    Set-Service @splatVss
+}
 ```
 
 **Configure the page file** to a fixed size. Auto-managed page files can grow unexpectedly and consume disk space on the OS drive. A fixed size of 30GB is a common starting point for servers with 128GB+ RAM, but the right size depends on your memory dump configuration.
@@ -193,7 +207,7 @@ Set-Service -Name VSS -StartupType Disabled -ComputerName ClusterNode02
 | 5022 | TCP | Database mirroring / AG endpoint |
 | 1434 | UDP | SQL Browser (disable if not needed) |
 
-If a non-default port is used for SQL Server (recommended for security — see [Security Practices](Security.md)), substitute that port for 1433 and ensure the firewall rules match.
+If a non-default port is used for SQL Server (recommended for security — see [Security Practices](../Security/Security.md)), substitute that port for 1433 and ensure the firewall rules match.
 
 ```powershell
 # Verify existing SQL-related firewall rules
@@ -219,4 +233,4 @@ powercfg /setactive SCHEME_MIN
 powercfg /getactivescheme
 ```
 
-After completing all configuration, proceed to [SQL Server Cluster Installation](SQLClusterInstallation.md).
+After completing all configuration, proceed to [SQL Server Cluster Installation](SqlClusterInstallation.md).

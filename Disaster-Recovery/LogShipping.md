@@ -41,9 +41,13 @@ The secondary database remains in either **NORECOVERY** or **STANDBY** mode unti
 Verify the recovery model of your databases:
 
 ```sql
-SELECT name, recovery_model_desc
-FROM sys.databases
-WHERE database_id > 4;
+SET NOCOUNT ON;
+
+SELECT
+    [name],
+    [recovery_model_desc]
+FROM [sys].[databases]
+WHERE [database_id] > 4;
 ```
 
 ```powershell
@@ -89,13 +93,17 @@ The following example loops through all user databases on the primary server and
 ```powershell
 $cred = Get-Credential "$env:USERDOMAIN\$env:USERNAME"
 # Exclude utility and infrastructure databases that don't need log shipping
-$databases = Get-DbaDatabase -SqlInstance PrimaryServer01 -ExcludeSystem `
-    -ExcludeDatabase ReportServer, ReportServerTempDB, DBAOps, SSISDB |
+$splatDbs = @{
+    SqlInstance     = 'PrimaryServer01'
+    ExcludeSystem   = $true
+    ExcludeDatabase = 'ReportServer', 'ReportServerTempDB', 'DBAOps', 'SSISDB'
+}
+$databases = Get-DbaDatabase @splatDbs |
     Select-Object -ExpandProperty Name |
     Sort-Object
 
 foreach ($db in $databases) {
-    $params = @{
+    $splatLogShip = @{
         SourceSqlInstance                = 'PrimaryServer01'
         SourceSqlCredential             = $cred
         DestinationSqlInstance          = 'SecondaryServer01'
@@ -120,7 +128,7 @@ foreach ($db in $databases) {
         RestoreScheduleFrequencySubdayType     = 'Hours'
         RestoreScheduleFrequencySubdayInterval = 4
     }
-    Invoke-DbaDbLogShipping @params
+    Invoke-DbaDbLogShipping @splatLogShip
 }
 ```
 
@@ -138,13 +146,13 @@ Log shipping only replicates database contents. It does **not** transfer server-
 The [`Start-DbaMigration`](https://docs.dbatools.io/#Start-DbaMigration) command copies all server-level objects from one instance to another. The `-Exclude Databases` flag skips the databases themselves (since log shipping handles those).
 
 ```powershell
-$params = @{
+$splatMigration = @{
     Source      = 'PrimaryServer01'
     Destination = 'SecondaryServer01'
     Exclude     = 'Databases'
 }
 
-Start-DbaMigration @params -Verbose
+Start-DbaMigration @splatMigration -Verbose
 ```
 
 This copies:
@@ -177,14 +185,16 @@ Log shipping status should be monitored to catch backup, copy, or restore failur
 Check the current state of log shipping on the secondary:
 
 ```sql
+SET NOCOUNT ON;
+
 SELECT
-    secondary_database,
-    last_copied_file,
-    last_copied_date,
-    last_restored_file,
-    last_restored_date,
-    last_restored_latency
-FROM msdb.dbo.log_shipping_monitor_secondary;
+    [secondary_database],
+    [last_copied_file],
+    [last_copied_date],
+    [last_restored_file],
+    [last_restored_date],
+    [last_restored_latency]
+FROM [msdb].[dbo].[log_shipping_monitor_secondary];
 ```
 
 ```powershell
