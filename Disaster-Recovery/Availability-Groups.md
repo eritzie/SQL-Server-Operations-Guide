@@ -210,7 +210,7 @@ Use only when the primary is unreachable and there is no synchronous secondary a
 ALTER AVAILABILITY GROUP [AG_Production] FORCE_FAILOVER_ALLOW_DATA_LOSS;
 ```
 
-After a forced failover, the old primary will be in a `SUSPENDED` or `DISCONNECTED` state. Resolve data loss before bringing it back online, then rejoin it to the AG:
+After a forced failover, the old primary will be in a `SUSPENDED` or `DISCONNECTED` state. Resolve any data loss before bringing it back online — the amount of divergence is visible in `drs.log_send_queue_size` from the monitoring DMV query above. Once reconciled, resume synchronization:
 
 ```sql
 -- On the old primary, after data reconciliation

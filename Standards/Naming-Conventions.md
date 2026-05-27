@@ -407,12 +407,54 @@ SELECT ...
 
 ---
 
-## SQL Agent Jobs, Linked Servers, and Other Instance Objects
+## SQL Agent Jobs
 
-These have dedicated naming standards in their own documents:
+Format: `{Category} - {Action} - {Scope}`
 
-- SQL Agent Jobs → [SQL Agent Job Standards](Agent-Job-Standards.md)
-- Linked Servers → [Linked Server Standards](Linked-Servers.md)
+| Segment | Purpose | Examples |
+|---|---|---|
+| Category | Identifies job owner or type | DBA, APP, MAINT, REPL, ETL |
+| Action | What the job does | Backup, Monitor, Archive, Rebuild, Purge |
+| Scope | What it acts on | Full, Log, All, UserDatabases |
+
+**Examples:**
+
+| Job Name | Notes |
+|---|---|
+| `DBA - Backup - Full` | Full database backup job |
+| `DBA - Backup - Log` | Transaction log backup job |
+| `MAINT - IndexOptimize - All` | Ola Hallengren index job |
+| `REPL - Monitor - Latency` | Replication latency check |
+| `ETL - Load - DataWarehouse` | ETL load job |
+
+**Required job properties before production deployment:**
+
+| Property | Requirement |
+|---|---|
+| Name | Follows naming convention above |
+| Category | Set to an approved category |
+| Description | One or more sentences stating what the job does and who owns it |
+| Notification operator | Required on any job that modifies data or runs longer than 15 minutes |
+| Owner | DBA service account — never SA |
+
+**Exception:** Ola Hallengren Maintenance Solution and SQL Server replication agent jobs retain their default names. They are well-known, searchable, and referenced in external documentation — renaming causes operational confusion.
+
+See [SQL Agent Job Standards](Agent-Job-Standards.md) for full job configuration requirements.
+
+---
+
+## Linked Servers
+
+Format: `{HOST}_{INSTANCE}` — mirrors the instance slug convention (backslash replaced with underscore).
+
+| Linked Server Name | Points To |
+|---|---|
+| `SQL-PROD-01_REPORTING` | `SQL-PROD-01\REPORTING` |
+| `SQL-PROD-01` | `SQL-PROD-01` (default instance) |
+
+Use the physical host and instance name. Avoid friendly display names that hide the target server identity — operational troubleshooting requires knowing the physical target immediately.
+
+See [Linked Server Standards](Linked-Servers.md) for full configuration requirements.
 
 ---
 

@@ -115,10 +115,10 @@ Implicit type conversions in WHERE clauses and JOIN predicates prevent index see
 ```sql
 -- Implicit conversion (index scan, slow)
 -- @param is NVARCHAR, column is VARCHAR
-SELECT * FROM dbo.Customers WHERE CustomerCode = @param;
+SELECT CustomerCode FROM dbo.Customers WHERE CustomerCode = @param;
 
 -- Explicit match (index seek, fast)
-SELECT * FROM dbo.Customers WHERE CustomerCode = CAST(@param AS VARCHAR(20));
+SELECT CustomerCode FROM dbo.Customers WHERE CustomerCode = CAST(@param AS VARCHAR(20));
 ```
 
 Check for implicit conversion warnings in execution plans — they appear as yellow warning triangles on the affected operators.
@@ -140,6 +140,7 @@ CREATE PROCEDURE dbo.usp_GetOrders
     @EndDate DATE
 AS
 BEGIN
+    SET NOCOUNT ON;
     SELECT OrderId, CustomerId, OrderDate, TotalAmount
     FROM dbo.Orders
     WHERE OrderDate BETWEEN @StartDate AND @EndDate
@@ -149,7 +150,21 @@ END;
 
 ### Naming Conventions
 
-For complete object naming standards covering tables, columns, constraints, indexes, procedures, functions, views, triggers, and variables, see [Naming Conventions](Naming-Conventions.md).
+Consistent naming makes code easier to read, maintain, and search. These conventions are recommendations — the most important thing is consistency within an environment.
+
+| Object | Convention | Example |
+|---|---|---|
+| Tables | PascalCase, singular noun | `Customer`, `OrderDetail` |
+| Stored procedures | `usp_` prefix, PascalCase | `usp_GetCustomerOrders` |
+| Scalar functions | `fn_` prefix, PascalCase | `fn_CalculateTax` |
+| Table-valued functions | `tvf_` prefix, PascalCase | `tvf_GetOrdersByDate` |
+| Views | `vw_` prefix, PascalCase | `vw_ActiveCustomers` |
+| Indexes | `IX_TableName_Column(s)` | `IX_Orders_CustomerId` |
+| Primary keys | `PK_TableName` | `PK_Customer` |
+| Foreign keys | `FK_ChildTable_ParentTable` | `FK_OrderDetail_Order` |
+| Default constraints | `DF_TableName_Column` | `DF_Customer_CreatedDate` |
+
+For the complete naming reference including servers, disks, logins, constraints, triggers, and variables, see [Naming Conventions](Naming-Conventions.md).
 
 ## Stored Procedures over Inline Queries
 
@@ -176,7 +191,7 @@ Indexes are covered in depth in [Performance Practices](../Performance/Performan
 **Design indexes for your queries, not for your tables.** Review the actual query patterns (sp_BlitzIndex, Query Store, plan cache analysis) and build indexes that support them. Guessing at indexes based on table structure alone leads to bloat.
 
 ```powershell
-# Identify unused indexes (candidates for removal)
+# Identify unused or duplicate indexes (candidates for removal)
 Find-DbaDbDuplicateIndex -SqlInstance SqlServer01 | Out-GridView
 
 # Analyze index usage across all databases
@@ -200,28 +215,34 @@ Run this periodically to catch configuration drift across instances.
 
 ```powershell
 # Compare sp_configure settings across two instances
-$primary = Get-DbaSpConfigure -SqlInstance SqlServer01
+$primary   = Get-DbaSpConfigure -SqlInstance SqlServer01
 $secondary = Get-DbaSpConfigure -SqlInstance SqlServer02
 
 $splatCompare = @{
     ReferenceObject  = $primary
     DifferenceObject = $secondary
-    Property         = 'Name', 'ConfiguredValue'
+    Property         = @('Name', 'ConfiguredValue')
     PassThru         = $true
 }
 Compare-Object @splatCompare |
     Select-Object Name, ConfiguredValue, SideIndicator |
     Out-GridView
 
-# Full instance configuration audit
+# Full instance configuration audit across the fleet
 $instances = @('SqlServer01', 'SqlServer02', 'SqlServer03')
-$instances | ForEach-Object {
+foreach ($inst in $instances) {
     [PSCustomObject]@{
-        Instance = $_
-        MaxMemory = (Get-DbaMaxMemory -SqlInstance $_).MaxValue
-        MaxDop = (Get-DbaSpConfigure -SqlInstance $_ -Name MaxDegreeOfParallelism).ConfiguredValue
-        CTFP = (Get-DbaSpConfigure -SqlInstance $_ -Name CostThresholdForParallelism).ConfiguredValue
-        BackupCompression = (Get-DbaSpConfigure -SqlInstance $_ -Name DefaultBackupCompression).ConfiguredValue
+        Instance          = $inst
+        MaxMemory         = (Get-DbaMaxMemory -SqlInstance $inst).MaxValue
+        MaxDop            = (Get-DbaSpConfigure -SqlInstance $inst -Name MaxDegreeOfParallelism).ConfiguredValue
+        CTFP              = (Get-DbaSpConfigure -SqlInstance $inst -Name CostThresholdForParallelism).ConfiguredValue
+        BackupCompression = (Get-DbaSpConfigure -SqlInstance $inst -Name DefaultBackupCompression).ConfiguredValue
     }
 } | Format-Table -AutoSize
 ```
+
+## See Also
+
+- [Security Practices](../Security/Security.md)
+- [Performance Practices](../Performance/PerformancePractices.md)
+- [SQL Standards and Policies](SQL-Standards-and-Policies.md)
