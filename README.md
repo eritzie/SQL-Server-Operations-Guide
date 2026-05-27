@@ -75,6 +75,7 @@ Every document includes both T-SQL and [dbatools](https://dbatools.io/) PowerShe
 | [Statistics Management](Standards/Statistics-Management.md) | Auto-update thresholds, dynamic threshold behavior at compat 130+, detection queries, FULLSCAN vs. sampling, filtered statistics, and Ola Hallengren integration. |
 | [Patch Management](Standards/Patch-Management.md) | CU inventory, change control gate, pre-patch checklist, application procedure, post-patch validation, and rollback path. |
 | [Linked Server Standards](Standards/Linked-Servers.md) | Naming convention, authentication options, required security settings, creation, audit queries, and when to use linked servers. |
+| [DNS Aliases](Standards/DNS-Aliases.md) | DNS CNAME alias standard for SQL Server — decoupling connection strings from physical infrastructure, default instance and fixed port standard, alias-per-role pattern, CNAME targets by HA type, and minimal-downtime migration cutover via DNS flip. |
 
 ## Tools Referenced
 
