@@ -1,18 +1,20 @@
 # SQL Comment Block Standards
 
-Standard header blocks for SQL Server objects committed to source control.
-Use the variant that matches the object type — each section is tailored to what is
-actually applicable. Do not copy the full stored procedure block onto a view.
+## Purpose
+
+Define standard header blocks for all SQL Server objects committed to source control.
+Use the variant that matches the object type — each section is tailored to what is actually applicable.
+Do not copy the full stored procedure block onto a view.
 
 ---
 
 ## Stored Procedure / Script
 
-Use for: stored procedures, ad-hoc scripts, maintenance scripts.
+Use for stored procedures, ad-hoc scripts, and maintenance scripts.
 
 ```sql
 /*===============================================================================================
-Copyright (C) [YYYY] [Your Company]. All rights reserved.
+Copyright (C) 2026 Outdoor Network. All rights reserved.
 
 Description:
     <Brief description of what this procedure or script does.>
@@ -37,12 +39,12 @@ Change History:
 
 ## Function (Scalar or Table-Valued)
 
-Use for: scalar functions, inline table-valued functions, multi-statement table-valued functions.
+Use for scalar functions, inline table-valued functions, and multi-statement table-valued functions.
 Drops Error Codes; adds Returns.
 
 ```sql
 /*===============================================================================================
-Copyright (C) [YYYY] [Your Company]. All rights reserved.
+Copyright (C) 2026 Outdoor Network. All rights reserved.
 
 Description:
     <Brief description of what this function does.>
@@ -67,12 +69,12 @@ Change History:
 
 ## View / Trigger
 
-Use for: views, DML triggers, DDL triggers.
-Parameters, Error Codes, and Usage Example are not applicable.
+Use for views and DML/DDL triggers.
+Parameters, Error Codes, and Usage Example are not applicable to these object types.
 
 ```sql
 /*===============================================================================================
-Copyright (C) [YYYY] [Your Company]. All rights reserved.
+Copyright (C) 2026 Outdoor Network. All rights reserved.
 
 Description:
     <Brief description of what this view or trigger does.>
@@ -88,19 +90,20 @@ Change History:
 
 ## Table Definition
 
-Use for: CREATE TABLE scripts committed to source control.
-Schema Notes captures design decisions that are not obvious from column names alone.
+Use for CREATE TABLE scripts committed to source control.
+Schema Notes captures design decisions that are not obvious from column names alone —
+soft-delete patterns, denormalized columns and why, partitioning scheme, surrogate vs natural keys.
+Omit the Schema Notes section if there is nothing non-obvious to document.
 
 ```sql
 /*===============================================================================================
-Copyright (C) [YYYY] [Your Company]. All rights reserved.
+Copyright (C) 2026 Outdoor Network. All rights reserved.
 
 Description:
     <What business entity or concept this table represents.>
 
 Schema Notes:
-    <Document non-obvious design decisions: soft-delete columns, denormalization,
-     partitioning scheme, surrogate vs natural keys, etc. Omit this section if none.>
+    <Non-obvious design decisions. Omit this section if none.>
 
 Change History:
     Date        Author                           Description
@@ -113,12 +116,13 @@ Change History:
 
 ## SQL Agent Job Definition
 
-Use for: SQL Agent job creation scripts (T-SQL against msdb).
+Use for SQL Agent job creation scripts (T-SQL against msdb).
 Steps lists each job step and its purpose. On Failure documents the notification target.
+See [[Agent-Job-Standards|Agent Job Standards]] for naming and ownership requirements.
 
 ```sql
 /*===============================================================================================
-Copyright (C) [YYYY] [Your Company]. All rights reserved.
+Copyright (C) 2026 Outdoor Network. All rights reserved.
 
 Description:
     <Brief description of what this job does and why it exists.>
@@ -139,3 +143,8 @@ Change History:
     YYYY-MM-DD  <Name> (<username>)              Initial creation
 ===============================================================================================*/
 ```
+
+## See Also
+
+- [[Agent-Job-Standards|Agent Job Standards]]
+- [[Naming-Conventions|Naming Conventions]]

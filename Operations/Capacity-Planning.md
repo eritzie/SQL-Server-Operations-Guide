@@ -2,14 +2,7 @@
 
 ## Purpose
 
-Identify resource constraints weeks before they become incidents. This guide covers disk growth
-trending, autogrowth event tracking, memory pressure indicators, TempDB sizing, and file
-autogrowth settings. Review capacity snapshots weekly; investigate any metric that has moved
-more than 10% in a single week.
-
-Related documents: [Monitoring](Monitoring.md) |
-[Performance Practices](../Performance/PerformancePractices.md) |
-[Standalone Installation](StandaloneInstallation.md)
+Identify resource constraints weeks before they become incidents. Covers disk growth trending, autogrowth event tracking, memory pressure indicators, TempDB sizing, and alert thresholds. Review capacity snapshots weekly; investigate any metric that has moved more than 10% in a single week.
 
 ---
 
@@ -20,7 +13,7 @@ Related documents: [Monitoring](Monitoring.md) |
 ```powershell
 # Disk free space across all volumes on the SQL Server
 $splatDisk = @{
-    ComputerName    = 'SqlServer01'
+    ComputerName    = $instance
     EnableException = $true
 }
 Get-DbaDiskSpace @splatDisk |
@@ -29,7 +22,7 @@ Get-DbaDiskSpace @splatDisk |
 
 # Database file sizes and free space
 $splatFiles = @{
-    SqlInstance     = 'SqlServer01'
+    SqlInstance     = $instance
     EnableException = $true
 }
 Get-DbaDbSpace @splatFiles |
@@ -37,9 +30,6 @@ Get-DbaDbSpace @splatFiles |
 ```
 
 ### Database Size by File Type
-
-Returns current allocated size broken out by data and log files. Run against each instance;
-sort by TotalSizeMB to prioritize which databases need pre-allocation attention first.
 
 ```sql
 SET NOCOUNT ON;
@@ -61,14 +51,9 @@ ORDER BY TotalSizeMB DESC;
 
 ## Autogrowth Event Tracking
 
-Autogrowth events are the early warning system for disk capacity. Each event means the file
-exhausted its pre-allocated space. Frequent events indicate undersized initial allocation or
-insufficient free space on the volume.
+Autogrowth events are the early warning system for disk capacity. Each event means the file exhausted its pre-allocated space. Frequent events indicate undersized initial allocation or insufficient free space on the volume.
 
 ### Read Autogrowth Events from the Default Trace
-
-The default trace is always running and requires no session setup. It captures autogrowth
-events with file name, duration, and growth amount.
 
 ```sql
 SET NOCOUNT ON;
@@ -93,19 +78,15 @@ WHERE [te].[name] IN ('Data File Auto Grow', 'Log File Auto Grow')
 ORDER BY [t].[StartTime] DESC;
 ```
 
-The default trace rolls over and retains only recent history (typically a few days). For
-longer-term trending, capture autogrowth events via Extended Events and write to a persistent
-table. See [Extended Events](Extended-Events.md) for session setup.
+The default trace retains only recent history (typically a few days). For longer-term trending, capture autogrowth events via Extended Events and write to a persistent table. See [[Extended-Events|Extended Events]] for session setup.
 
 ### Autogrowth Settings Audit
 
-Autogrowth should be a fixed MB amount, never a percentage. Percentage-based growth causes
-increasingly large stalls as the database grows (a 10% growth on a 1 TB database stalls for
-minutes). Find all files still set to percentage growth:
+Autogrowth should be a fixed MB amount, never a percentage. Percentage-based growth causes increasingly large stalls as the database grows.
 
 ```powershell
 $splatGrowth = @{
-    SqlInstance     = 'SqlServer01'
+    SqlInstance     = $instance
     EnableException = $true
 }
 Get-DbaDbFile @splatGrowth |
@@ -115,27 +96,22 @@ Get-DbaDbFile @splatGrowth |
 
 ### Recommended Autogrowth Sizes
 
-| Database Size    | Recommended Autogrowth       | Rationale                                         |
-|------------------|------------------------------|---------------------------------------------------|
-| < 100 GB         | 1–5 GB                       | Infrequent but not excessive                      |
-| 100 GB – 1 TB    | 10–25 GB                     | Balance between frequency and stall time          |
-| > 1 TB           | 25–50 GB                     | Keep events infrequent; pre-allocate instead      |
-| Log files        | 1–5 GB or 10% of data file   | Log grows faster during large transactions        |
+| Database Size | Recommended Autogrowth | Rationale |
+|---|---|---|
+| < 100 GB | 1–5 GB | Infrequent but not excessive |
+| 100 GB – 1 TB | 10–25 GB | Balance between frequency and stall time |
+| > 1 TB | 25–50 GB | Keep events infrequent; pre-allocate instead |
+| Log files | 1–5 GB or 10% of data file | Log grows faster during large transactions |
 
-Pre-allocate files to their expected size at creation. Autogrowth is a safety net, not a
-sizing strategy.
+Pre-allocate files to their expected size at creation. Autogrowth is a safety net, not a sizing strategy.
 
 ---
 
 ## Memory Pressure Indicators
 
-SQL Server's buffer pool should hold the working set of data pages. When it cannot, queries
-read from disk on every execution instead of from memory.
-
 ### Page Life Expectancy
 
-PLE is the average number of seconds a page stays in the buffer pool before being evicted.
-A sustained drop indicates the buffer pool is too small for the current working set.
+PLE is the average seconds a page stays in the buffer pool before eviction. A sustained drop indicates the buffer pool is too small for the current working set.
 
 ```sql
 SET NOCOUNT ON;
@@ -150,15 +126,9 @@ WHERE [counter_name] = 'Page life expectancy'
   AND [object_name]  LIKE '%Buffer Manager%';
 ```
 
-A steady value of 300+ is commonly cited as a floor, but establish your own baseline during
-normal business hours. A drop of 50% or more from baseline during normal operations indicates
-memory pressure. A drop of 75% or more is critical.
+Establish a baseline during normal business hours. A drop of 50% or more from baseline indicates memory pressure; 75% or more is critical.
 
 ### Buffer Pool Usage by Database
-
-Identify which databases are consuming the most buffer pool pages. Databases consuming
-disproportionate buffer pool relative to their size may have missing indexes causing full
-scans on large tables.
 
 ```sql
 SET NOCOUNT ON;
@@ -172,27 +142,26 @@ GROUP BY [database_id]
 ORDER BY BufferPoolMB DESC;
 ```
 
+Databases consuming disproportionate buffer pool relative to their size may have missing indexes causing full scans on large tables.
+
 ### Max Memory Configuration Check
 
 ```powershell
 $splatMem = @{
-    SqlInstance     = 'SqlServer01'
+    SqlInstance     = $instance
     EnableException = $true
 }
 Test-DbaMaxMemory @splatMem |
     Select-Object SqlInstance, MaxValue, RecommendedValue, Total
 ```
 
-If MaxValue exceeds RecommendedValue, SQL Server can starve the OS of memory, causing paging.
-If MaxValue is far below RecommendedValue, the buffer pool is unnecessarily constrained.
+If `MaxValue` exceeds `RecommendedValue`, SQL Server can starve the OS of memory, causing paging.
 
 ---
 
 ## TempDB Capacity
 
-TempDB runs out of space when version store, sort spills, or user temp tables consume all
-allocated space. Monitor the four usage categories: user objects, internal objects (sort
-spills, hash joins), version store (row versioning / RCSI), and free space.
+TempDB runs out of space when version store, sort spills, or user temp tables consume all allocated space. Monitor the four usage categories:
 
 ```sql
 SET NOCOUNT ON;
@@ -206,16 +175,13 @@ FROM [sys].[dm_db_file_space_usage]
 WHERE [database_id] = 2;
 ```
 
-A growing version store usually means long-running open transactions or Accelerated Database
-Recovery (ADR) persistent version store (PVS) cleanup lag. Query
-`[sys].[dm_tran_active_snapshot_database_transactions]` to find the blocking session.
+A growing version store usually means long-running open transactions or ADR persistent version store (PVS) cleanup lag. Query `[sys].[dm_tran_active_snapshot_database_transactions]` to find the blocking session.
 
 ---
 
 ## CPU Trending
 
-SQL Server does not retain long-term CPU history natively. The ring buffer holds approximately
-four hours of 1-minute samples.
+SQL Server retains approximately four hours of 1-minute CPU samples in the ring buffer:
 
 ```sql
 SET NOCOUNT ON;
@@ -226,13 +192,13 @@ SELECT @ts_now = [cpu_ticks] / ([cpu_ticks] / [ms_ticks])
 FROM   [sys].[dm_os_sys_info];
 
 SELECT TOP 100
-    DATEADD(MILLISECOND, -1 * (@ts_now - [timestamp]), GETDATE())                                AS RecordedAt,
-    [record].[value]('(./Record/SchedulerMonitorEvent/SystemHealth/ProcessUtilization)[1]', 'int') AS SQL_CPU_Percent,
-    [record].[value]('(./Record/SchedulerMonitorEvent/SystemHealth/SystemIdle)[1]', 'int')         AS Idle_CPU_Percent,
+    DATEADD(MILLISECOND, -1 * (@ts_now - [timestamp]), GETDATE())                                    AS RecordedAt,
+    [record].[value]('(./Record/SchedulerMonitorEvent/SystemHealth/ProcessUtilization)[1]', 'int')   AS SQL_CPU_Percent,
+    [record].[value]('(./Record/SchedulerMonitorEvent/SystemHealth/SystemIdle)[1]', 'int')           AS Idle_CPU_Percent,
     100
         - [record].[value]('(./Record/SchedulerMonitorEvent/SystemHealth/SystemIdle)[1]', 'int')
         - [record].[value]('(./Record/SchedulerMonitorEvent/SystemHealth/ProcessUtilization)[1]', 'int')
-                                                                                                  AS Other_CPU_Percent
+                                                                                                      AS Other_CPU_Percent
 FROM (
     SELECT [timestamp], CAST([record] AS xml) AS record
     FROM   [sys].[dm_os_ring_buffers]
@@ -241,24 +207,20 @@ FROM (
 ORDER BY RecordedAt DESC;
 ```
 
-For sustained CPU tracking beyond the ring buffer, schedule a SQL Agent job to capture this
-data into a table every 15–30 minutes. See [Monitoring](Monitoring.md) for Agent job setup.
+For sustained CPU tracking beyond the ring buffer, schedule a SQL Agent job to capture this data into a history table every 15–30 minutes. See [[Monitoring|Monitoring]] for Agent job setup.
 
 ---
 
 ## Capacity Planning Baseline Script
 
-Run weekly and save output for trending. Comparing snapshots over time reveals growth
-trajectories before they become emergencies.
+Run weekly and save output for trending:
 
 ```powershell
 $ErrorActionPreference = 'Stop'
 
-$instance   = 'SqlServer01'
 $outputPath = '\\ManagementServer\CapacitySnapshots'
 $date       = Get-Date -Format 'yyyy-MM-dd'
 
-# Disk space snapshot
 $splatDisk = @{
     ComputerName    = $instance
     EnableException = $true
@@ -267,7 +229,6 @@ Get-DbaDiskSpace @splatDisk |
     Select-Object @{n='SnapshotDate';e={$date}}, Name, Label, Capacity, Free, PercentFree |
     Export-Csv "$outputPath\Disk_$date.csv" -NoTypeInformation
 
-# Database size snapshot
 $splatSize = @{
     SqlInstance     = $instance
     EnableException = $true
@@ -279,15 +240,22 @@ Get-DbaDatabase @splatSize |
 
 ---
 
-## Thresholds and Alert Recommendations
+## Alert Thresholds
 
-| Resource                        | Warning Threshold        | Critical Threshold       |
-|---------------------------------|--------------------------|--------------------------|
-| Disk free space                 | 25%                      | 10%                      |
-| Database file free space        | 20%                      | 10%                      |
-| Buffer pool PLE                 | 50% below baseline       | 75% below baseline       |
-| TempDB free space               | 25%                      | 10%                      |
-| CPU (sustained over 1 hour)     | 75%                      | 90%                      |
+| Resource | Warning | Critical |
+|---|---|---|
+| Disk free space | 25% | 10% |
+| Database file free space | 20% | 10% |
+| Buffer pool PLE | 50% below baseline | 75% below baseline |
+| TempDB free space | 25% | 10% |
+| CPU (sustained over 1 hour) | 75% | 90% |
 
-Configure SQL Agent alerts for disk thresholds using WMI or a monitoring agent. See
-[Monitoring](Monitoring.md) for alert configuration steps.
+---
+
+## Related Documents
+
+- [[Monitoring|Monitoring]] — alert configuration for disk and performance thresholds
+- [[Extended-Events|Extended Events]] — persistent autogrowth event capture
+- [[Standalone-Installation|Standalone Installation]] — disk layout and autogrowth configuration at build time
+- [[../Performance/Performance-Practices|Performance Practices]] — memory and buffer pool detail
+- [[Operations|Back to Operations]]

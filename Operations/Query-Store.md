@@ -6,6 +6,19 @@ Document when to enable Query Store, what settings to use, and how to use it for
 
 ---
 
+## GP Exception — Read First
+
+> [!WARNING]
+> Do not enable Query Store on DYNAMICS or GP company databases without explicit testing in a GP test environment first. GP has historically been sensitive to Query Store in specific versions. Validate on a GP test instance before enabling on any production GP database.
+
+If Query Store causes issues on GP databases, disable it immediately:
+
+```sql
+ALTER DATABASE [GPDatabase] SET QUERY_STORE = OFF;
+```
+
+---
+
 ## When to Enable
 
 Enable Query Store on:
@@ -135,5 +148,7 @@ Use these reports for routine review. The T-SQL queries above are for programmat
 
 ## Related Documents
 
-- [Performance Practices](../Performance/PerformancePractices.md) — indexing, wait stats, and broader performance guidance
-- [Monitoring](Monitoring.md) — real-time activity and blocking detection
+- [[Performance-Practices|Performance Practices]] — indexing, wait stats, and broader performance guidance
+- [[Monitoring|Monitoring]] — real-time activity and blocking detection
+- [[Dynamics-GP-Impact-Reference|Dynamics GP Impact Reference]] — GP exception details
+- [[../Index|Back to Index]]

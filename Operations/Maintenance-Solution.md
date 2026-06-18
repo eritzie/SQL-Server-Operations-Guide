@@ -64,6 +64,12 @@ The solution installs default jobs with default schedules. Adjust schedules to f
 | `DatabaseIntegrityCheck - USER_DATABASES` | Weekly, Sunday 2:00 AM | |
 | `IndexOptimize - USER_DATABASES` | Weekly, Sunday 1:00 AM | |
 
+### GP Instance Considerations
+
+- Do not schedule index optimization during business hours or during expected GP posting windows.
+- `IndexOptimize` on GP company databases will run online index rebuilds where possible (Enterprise Edition only — Standard Edition rebuilds are offline and will block GP). Verify edition before scheduling.
+- See [[Dynamics-GP-Impact-Reference|Dynamics GP Impact Reference]] for the index rebuild impact assessment.
+
 ---
 
 ## IndexOptimize — Key Parameters
@@ -86,7 +92,7 @@ EXECUTE [master].[dbo].[IndexOptimize]
 
 | Parameter | Value | Reasoning |
 |---|---|---|
-| `FragmentationLevel1` | 5 | Reorganize above 5% — matches guidance in Performance Practices |
+| `FragmentationLevel1` | 5 | Reorganize above 5% — matches guidance in Performance-Practices |
 | `FragmentationLevel2` | 30 | Rebuild above 30% |
 | `MinNumberOfPages` | 1000 | Skip indexes under ~8 MB — fragmentation on small indexes has negligible impact |
 | `UpdateStatistics` | ALL | Update both index and column statistics in the same pass |
@@ -135,7 +141,8 @@ Get-DbaAgentJobHistory @splatHistory |
 
 ## Related Documents
 
-- [Backup and Restore](BackupRestore.md) — manual backup procedures and restore runbooks
-- [Performance Practices](../Performance/PerformancePractices.md) — index fragmentation thresholds and strategy
-- [SQL Agent Job Standards](../Standards/Agent-Job-Standards.md) — job naming, notification, and history retention
-- [Monitoring](Monitoring.md) — Agent job failure monitoring
+- [[Backup-and-Restore|Backup and Restore]] — manual backup procedures and restore runbooks
+- [[Performance-Practices|Performance Practices]] — index fragmentation thresholds and strategy
+- [[Agent-Job-Standards|SQL Agent Job Standards]] — job naming, notification, and history retention
+- [[Monitoring|Monitoring]] — Agent job failure monitoring
+- [[../Index|Back to Index]]

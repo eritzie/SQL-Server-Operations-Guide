@@ -28,15 +28,13 @@ This document covers both **Basic Availability Groups** (Standard Edition) and *
 
 ## HA vs. DR Topology
 
-Replicas can be configured synchronous or asynchronous. The mode determines the failover behavior and data loss exposure.
-
 | Configuration | RPO | RTO | Failover Type | Typical Use |
 |---|---|---|---|---|
 | Synchronous replica, same datacenter | Zero data loss | Seconds (automatic) | Automatic or manual | **HA** — primary use case |
 | Asynchronous replica, remote datacenter | Potential data loss (latency-dependent) | Minutes (manual) | Manual forced failover | **DR** — secondary use case |
 | Synchronous replica, remote datacenter | Zero data loss | Seconds to minutes | Manual (recommended) or automatic | **HA + DR** — requires very low WAN latency |
 
-Basic AG supports one secondary, so it can serve either HA or DR, but not both simultaneously. A synchronous secondary in the same datacenter gives automatic HA; moving it to a remote datacenter gives DR at the cost of failover automation.
+Basic AG supports one secondary, so it can serve either HA or DR, but not both simultaneously.
 
 ---
 
@@ -44,7 +42,7 @@ Basic AG supports one secondary, so it can serve either HA or DR, but not both s
 
 **Both editions:**
 
-- [ ] Windows Server Failover Cluster (WSFC) configured — see [Windows Cluster Setup](../Clustering/WindowsClusterSetup.md)
+- [ ] Windows Server Failover Cluster (WSFC) configured — see [[../Clustering/Windows-Cluster-Setup|Windows Cluster Setup]]
 - [ ] All AG databases in **FULL** recovery model
 - [ ] SQL Server service accounts have `CONNECT` permission on each other's database mirroring endpoints (port 5022)
 - [ ] SQL Server Agent running on all replicas
@@ -101,12 +99,12 @@ One AG per database. Repeat for each database that requires AG protection.
 $splatBasicAg = @{
     Primary             = $primary
     Secondary           = $secondary
-    Name                = 'AG_OrderManagement'     # AG name — does not have to match database name
+    Name                = 'AG_OrderManagement'
     Database            = 'OrderManagement'
-    Basic               = $true                    # Required flag for Standard Edition
+    Basic               = $true                 # Required flag for Standard Edition
     FailoverMode        = 'Automatic'
     AvailabilityMode    = 'SynchronousCommit'
-    Listener            = 'AG-OrderMgmt'           # Listener DNS name
+    Listener            = 'AG-OrderMgmt'
     ListenerPort        = 1433
     EnableException     = $true
 }
@@ -129,7 +127,7 @@ $splatFullAg = @{
     AvailabilityMode    = 'SynchronousCommit'
     Listener            = 'AG-Production'
     ListenerPort        = 1433
-    ReadonlyRoutingList = $secondary              # Enable read-intent routing to secondary
+    ReadonlyRoutingList = $secondary
     EnableException     = $true
 }
 New-DbaAvailabilityGroup @splatFullAg
@@ -141,14 +139,11 @@ For asynchronous (DR) replicas, change `AvailabilityMode = 'AsynchronousCommit'`
 
 ## Seeding
 
-**Basic AG (manual seeding only):**
-
-Manual seeding requires backing up the database on the primary and restoring it on the secondary with `NORECOVERY` before the AG can synchronize. dbatools handles this automatically when `-Basic` is specified in the setup command above — it performs the backup and restore as part of `New-DbaAvailabilityGroup`.
+**Basic AG (manual seeding only):** dbatools handles the backup and restore automatically when `-Basic` is specified in `New-DbaAvailabilityGroup`.
 
 **Full AG (automatic or manual):**
 
 ```powershell
-# Add a database to an existing full AG using automatic seeding
 $splatSeed = @{
     SqlInstance       = $primary
     AvailabilityGroup = 'AG_Production'
@@ -159,7 +154,7 @@ $splatSeed = @{
 Add-DbaAgDatabase @splatSeed
 ```
 
-Automatic seeding streams the database directly from primary to secondary without a manual backup/restore step. It requires that the secondary data directory exists and is accessible by the SQL Server service account.
+Automatic seeding streams the database directly from primary to secondary. It requires the secondary data directory to exist and be accessible by the SQL Server service account.
 
 ---
 
@@ -167,7 +162,7 @@ Automatic seeding streams the database directly from primary to secondary withou
 
 ### Automatic Failover
 
-Automatic failover occurs when the WSFC health check determines the primary is unavailable and a synchronous secondary is configured for automatic failover. No DBA action is required. Verify the AG configuration allows it:
+Occurs when WSFC determines the primary is unavailable and a synchronous secondary is configured for automatic failover. Verify the AG allows it:
 
 ```powershell
 $splatReplica = @{
@@ -179,11 +174,11 @@ Get-DbaAgReplica @splatReplica |
     Select-Object SqlInstance, Name, AvailabilityMode, FailoverMode, Role
 ```
 
-Both the primary and secondary must show `FailoverMode = Automatic` for automatic failover to be possible.
+Both replicas must show `FailoverMode = Automatic`.
 
 ### Planned Manual Failover (Zero Data Loss)
 
-Use for maintenance windows, patching, or controlled switchovers. Run on the **current primary**:
+Run on the **current primary**:
 
 ```powershell
 $splatFailover = @{
@@ -202,10 +197,9 @@ ALTER AVAILABILITY GROUP [AG_Production] FAILOVER;
 
 ### Forced Failover (Data Loss Risk)
 
-Use only when the primary is unreachable and there is no synchronous secondary available. Run on the **target secondary**:
+Use only when the primary is unreachable and no synchronous secondary is available. Run on the **target secondary**:
 
 ```sql
--- On the secondary that will become the new primary
 -- WARNING: This may result in data loss if the secondary is not synchronized
 ALTER AVAILABILITY GROUP [AG_Production] FORCE_FAILOVER_ALLOW_DATA_LOSS;
 ```
@@ -213,7 +207,6 @@ ALTER AVAILABILITY GROUP [AG_Production] FORCE_FAILOVER_ALLOW_DATA_LOSS;
 After a forced failover, the old primary will be in a `SUSPENDED` or `DISCONNECTED` state. Resolve any data loss before bringing it back online — the amount of divergence is visible in `drs.log_send_queue_size` from the monitoring DMV query above. Once reconciled, resume synchronization:
 
 ```sql
--- On the old primary, after data reconciliation
 ALTER DATABASE [OrderManagement] SET HADR RESUME;
 ```
 
@@ -231,19 +224,11 @@ Get-DbaAvailabilityGroup @splatAg |
     Select-Object SqlInstance, Name, PrimaryReplica, HealthState, SynchronizationHealthDescription
 
 # Replica-level state
-$splatReplica = @{
-    SqlInstance     = $primary
-    EnableException = $true
-}
-Get-DbaAgReplica @splatReplica |
+Get-DbaAgReplica -SqlInstance $primary |
     Select-Object AvailabilityGroup, Name, Role, AvailabilityMode, FailoverMode, ConnectionState, RollupSynchronizationState
 
 # Database-level synchronization and queue sizes
-$splatDb = @{
-    SqlInstance     = $primary
-    EnableException = $true
-}
-Get-DbaAgDatabase @splatDb |
+Get-DbaAgDatabase -SqlInstance $primary |
     Select-Object AvailabilityGroup, Name, SynchronizationState, RedoQueueSize, LogSendQueueSize
 ```
 
@@ -262,12 +247,12 @@ SELECT
     drs.[redo_queue_size]                   AS RedoQueueKB,
     drs.[log_send_queue_size]               AS SendQueueKB,
     drs.[database_state_desc]               AS DatabaseState
-FROM [sys].[availability_groups]            AS ag
-JOIN [sys].[availability_replicas]          AS ar
+FROM [sys].[availability_groups]                        AS ag
+JOIN [sys].[availability_replicas]                      AS ar
     ON ag.[group_id] = ar.[group_id]
-JOIN [sys].[dm_hadr_availability_replica_states] AS ars
+JOIN [sys].[dm_hadr_availability_replica_states]        AS ars
     ON ar.[replica_id] = ars.[replica_id]
-LEFT JOIN [sys].[dm_hadr_database_replica_states] AS drs
+LEFT JOIN [sys].[dm_hadr_database_replica_states]       AS drs
     ON ars.[replica_id] = drs.[replica_id]
 ORDER BY ag.[name], ars.[role_desc] DESC;
 ```
@@ -276,12 +261,11 @@ ORDER BY ag.[name], ars.[role_desc] DESC;
 
 ## Server Object Synchronization
 
-AGs protect databases but not instance-level objects. Logins, SQL Agent jobs, linked servers, and credentials must be kept in sync manually — or automatically with SQL Server 2022 Contained AGs.
+AGs protect databases but not instance-level objects. Logins, Agent jobs, linked servers, and credentials must be kept in sync manually — or automatically with SQL Server 2022 Contained AGs.
 
 **Traditional approach (all versions):**
 
 ```powershell
-# Copy logins from primary to secondary (excludes system logins)
 $splatLogin = @{
     Source          = $primary
     Destination     = $secondary
@@ -289,7 +273,6 @@ $splatLogin = @{
 }
 Copy-DbaLogin @splatLogin
 
-# Copy SQL Agent jobs
 $splatJobs = @{
     Source          = $primary
     Destination     = $secondary
@@ -298,27 +281,26 @@ $splatJobs = @{
 Copy-DbaAgentJob @splatJobs
 ```
 
-Run these after any login or job changes on the primary, or schedule them as a SQL Agent job on the primary.
+Run these after any login or job changes on the primary, or schedule them as an Agent job.
 
 **SQL Server 2022 Contained Availability Groups (Enterprise Edition only):**
 
-A Contained AG includes a contained `master` database that stores logins and Agent jobs within the AG itself. After a failover, logins and jobs are available on the new primary automatically — no sync scripts required. This is the modern approach for new Enterprise Edition deployments on SQL Server 2022+.
+A Contained AG includes a contained `master` database that stores logins and Agent jobs within the AG itself. After any failover, logins and jobs are available on the new primary automatically — no sync scripts required.
 
 ```sql
--- Create a Contained AG (SQL Server 2022+, Enterprise Edition)
--- This replaces the standard CREATE AVAILABILITY GROUP syntax
 CREATE AVAILABILITY GROUP [AG_Production]
     WITH (CONTAINED)
     ...
 ```
 
-See [SQL Server 2022 Readiness](../Operations/SQL-2022-Readiness.md) for Contained AG details.
+See [[../Operations/SQL-2022-Readiness|SQL Server 2022 Readiness]] for Contained AG details.
 
 ---
 
 ## Related Documents
 
-- [Windows Cluster Setup](../Clustering/WindowsClusterSetup.md) — WSFC prerequisite
-- [Log Shipping Setup](LogShipping.md) — alternative HA/DR for Standard Edition without WSFC
-- [SQL Server 2022 Readiness](../Operations/SQL-2022-Readiness.md) — Contained AG details
-- [Monitoring](../Operations/Monitoring.md) — job monitoring and alerting
+- [[../Clustering/Windows-Cluster-Setup|Windows Cluster Setup]] — WSFC prerequisite
+- [[Log-Shipping-Setup|Log Shipping Setup]] — alternative HA/DR for Standard Edition without WSFC
+- [[../Operations/SQL-2022-Readiness|SQL Server 2022 Readiness]] — Contained AG details
+- [[../Operations/Monitoring|Monitoring]] — job monitoring and alerting
+- [[Disaster-Recovery|Back to Disaster Recovery]]

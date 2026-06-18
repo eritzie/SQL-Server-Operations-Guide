@@ -1,8 +1,8 @@
-# SQL Server Standalone Installation Guide
+# SQL Server Standalone Installation
 
 ## Purpose
 
-Step-by-step guide for installing and hardening a standalone SQL Server instance. Covers pre-installation OS preparation, installation configuration, and post-installation settings. For Failover Cluster Instance installation, see [Windows Cluster Setup](../Clustering/WindowsClusterSetup.md) and [SQL Server Cluster Installation](../Clustering/SqlClusterInstallation.md).
+Step-by-step guide for installing and hardening a standalone SQL Server instance. Covers pre-installation OS preparation, installation configuration, and post-installation settings. For Failover Cluster Instance installation, see [[../Clustering/Windows-Cluster-Setup|Windows Cluster Setup]] and [[../Clustering/SQL-Cluster-Installation|SQL Server Cluster Installation]].
 
 ---
 
@@ -18,7 +18,7 @@ Get-ComputerInfo | Select-Object WindowsProductName, OsVersion, TotalPhysicalMem
 
 # Power plan — SQL Server requires High Performance, not Balanced
 # Balanced throttles CPU frequency, which degrades query performance
-powercfg -setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c   # High Performance GUID
+powercfg -setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
 
 # Verify the active plan
 powercfg -getactivescheme
@@ -27,14 +27,10 @@ powercfg -getactivescheme
 **Disk configuration:** Format all SQL Server data volumes with 64 KB allocation unit size. The default 4 KB NTFS cluster size causes excessive I/O for SQL Server's 64 KB and 128 KB write patterns.
 
 ```powershell
-# Check current allocation unit size on a volume (NTFS)
-# Run in an elevated prompt — Get-Volume does not expose cluster size
+# Check current allocation unit size (target: Bytes Per Cluster : 65536)
 fsutil fsinfo ntfsinfo D: | Select-String "Bytes Per Cluster"
-# Target output: Bytes Per Cluster : 65536
-```
 
-Format new volumes at 64 KB via Disk Management or:
-```powershell
+# Format a new volume at 64 KB
 Format-Volume -DriveLetter D -FileSystem NTFS -AllocationUnitSize 65536 -NewFileSystemLabel 'SQLData' -Confirm:$false
 ```
 
@@ -43,8 +39,8 @@ Format-Volume -DriveLetter D -FileSystem NTFS -AllocationUnitSize 65536 -NewFile
 | Volume | Purpose | Notes |
 |---|---|---|
 | C: | OS only | Do not put SQL Server binaries or data here |
-| D: (or E:) | SQL data files (.mdf, .ndf) | Separate from logs |
-| L: (or F:) | SQL log files (.ldf) | Sequential write, benefits from isolation |
+| D: | SQL data files (.mdf, .ndf) | Separate from logs |
+| L: | SQL log files (.ldf) | Sequential write, benefits from isolation |
 | T: | TempDB data and log | High I/O — isolate from user databases |
 | B: (or UNC share) | Backups | Never on the same spindle as data |
 
@@ -63,9 +59,7 @@ Exclude from real-time scanning:
 
 ### Service Accounts
 
-Create service accounts in Active Directory before running Setup. SQL Server Setup cannot create domain accounts — it can only create local accounts, which are unsuitable for production.
-
-Recommended account structure:
+Create service accounts in Active Directory before running Setup. SQL Server Setup cannot create domain accounts.
 
 | Service | Account | Type |
 |---|---|---|
@@ -74,15 +68,15 @@ Recommended account structure:
 | SSRS (if installing) | `svc-ssrs-<host>` | Domain account — gMSA not supported |
 | SSIS (if installing) | `svc-ssis-<host>` | gMSA (preferred) or domain account |
 
-See [Security Practices](../Security/Security.md#group-managed-service-accounts-gmsa) for gMSA setup. For gMSA accounts, enter `DOMAIN\svc-sql-host$` (trailing `$`) in Setup — leave the password blank.
+See [[../Security/Security-Practices|Security Practices]] for gMSA setup. For gMSA accounts, enter `DOMAIN\svc-sql-host$` (trailing `$`) in Setup and leave the password blank.
 
 ### Firewall
 
 ```powershell
-# Open SQL Server default port (adjust if using a non-default port)
+# Open SQL Server default port
 New-NetFirewallRule -DisplayName 'SQL Server' -Direction Inbound -Protocol TCP -LocalPort 1433 -Action Allow
 
-# Open SQL Server Browser (needed only for named instances with dynamic ports)
+# SQL Server Browser — needed only for named instances with dynamic ports
 New-NetFirewallRule -DisplayName 'SQL Server Browser' -Direction Inbound -Protocol UDP -LocalPort 1434 -Action Allow
 
 # DAC port — restrict to DBA management hosts only
@@ -106,18 +100,16 @@ Install only features that are actively used. Every installed feature is an atta
 | SQL Server Browser | Named instances only | Disable after install on default instances |
 | SSRS | Separate installer (2017+) | Do not install on the same server as the engine unless resources are dedicated |
 | SSIS | Only if this server runs ETL | SSIS is a runtime, not tied to a specific database |
-| SSAS | Only if this server hosts Analysis Services | Separate service with its own memory management |
-| Management Tools | No | Install SSMS separately on management workstations — not on the server |
+| Management Tools | No | Install SSMS separately on management workstations |
 
 ### Collation
 
-Set collation during Setup — changing it afterward requires rebuilding the system databases, which is a significant operational event.
+Set collation during Setup — changing it afterward requires rebuilding the system databases.
 
-For most SQL Server environments: **`SQL_Latin1_General_CP1_CI_AS`** — case-insensitive, accent-sensitive, matches SQL Server system object collation. Use this unless the application has documented requirements for a different collation.
+- **`SQL_Latin1_General_CP1_CI_AS`** — case-insensitive, accent-sensitive, matches SQL Server system object collation. Use this unless the application has documented requirements for a different collation.
+- **`Latin1_General_100_CI_AS_SC`** — supplementary character aware; use for environments with multilingual data.
 
-For environments with multilingual data or requirements for binary-accurate sorting: **`Latin1_General_100_CI_AS_SC`** — supplementary character aware, modern collation.
-
-Do not use case-sensitive collations (`_CS_`) unless the application explicitly requires it — they make ad hoc queries and string comparisons error-prone.
+Do not use case-sensitive collations (`_CS_`) unless the application explicitly requires it.
 
 ### Data Directories
 
@@ -125,7 +117,7 @@ Set these during Setup. Accept no defaults for data file locations.
 
 | Setting | Value |
 |---|---|
-| Data root directory | `D:\MSSQL` (data volume) |
+| Data root directory | `D:\MSSQL` |
 | User database directory | `D:\MSSQL\Data` |
 | User database log directory | `L:\MSSQL\Logs` |
 | TempDB data directory | `T:\MSSQL\TempDB` |
@@ -134,17 +126,11 @@ Set these during Setup. Accept no defaults for data file locations.
 
 ### TempDB Configuration
 
-SQL Server 2016+ Setup allows configuring TempDB file count during installation. Set this during Setup rather than afterward.
-
-Number of TempDB data files:
-- Match the number of logical CPU cores, up to 8
-- Above 8 cores: start at 8 and increase only if TempDB allocation contention is observed in production
-
-All TempDB data files should be the same initial size and grow in equal increments. Unequal files cause proportional fill to route all allocations to the larger file.
+SQL Server 2016+ Setup allows configuring TempDB file count during installation. Set the number of TempDB data files to match the number of logical CPU cores, up to 8. All files must be the same initial size with equal growth increments — unequal files cause proportional fill to route all allocations to the larger file.
 
 ### Authentication Mode
 
-Select **Windows Authentication Mode** only. Mixed Mode (SQL + Windows) enables SQL logins by default, including SA with a password. If applications require SQL logins, add them explicitly after installation — do not enable Mixed Mode unless there is a documented requirement.
+Select **Windows Authentication Mode** only. Mixed Mode enables SQL logins by default, including SA with a password. Add SQL logins explicitly after installation only if applications require them.
 
 ---
 
@@ -155,8 +141,7 @@ Apply all of the following immediately after installation. Do not connect applic
 ```powershell
 $instance = 'SqlServer01'   # replace with actual instance name
 
-# Max Server Memory — leave headroom for OS; adjust for SSRS/SSIS if colocated
-# This example sets 80% of RAM; tune based on server role and total RAM
+# Max Server Memory — set to ~80% of RAM; tune based on server role and total RAM
 $totalRamMb = (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1MB
 $splatMem = @{
     SqlInstance     = $instance
@@ -165,8 +150,7 @@ $splatMem = @{
 }
 Set-DbaMaxMemory @splatMem
 
-# MAXDOP — based on NUMA topology; see Performance Practices for full guidance
-# Starting point for single NUMA node: half of logical CPUs, max 8
+# MAXDOP — starting point for single NUMA node: half of logical CPUs, max 8
 $splatMaxdop = @{
     SqlInstance     = $instance
     Name            = 'MaxDegreeOfParallelism'
@@ -193,7 +177,7 @@ $splatBackupComp = @{
 }
 Set-DbaSpConfigure @splatBackupComp
 
-# Optimize for ad hoc workloads — prevents single-use plans from bloating plan cache
+# Optimize for ad hoc workloads
 $splatAdHoc = @{
     SqlInstance     = $instance
     Name            = 'OptimizeForAdHocWorkloads'
@@ -234,7 +218,7 @@ $splatXp = @{
 }
 Set-DbaSpConfigure @splatXp
 
-# Disable OLE Automation (off by default — verify)
+# Disable OLE Automation Procedures
 $splatOle = @{
     SqlInstance     = $instance
     Name            = 'Ole Automation Procedures'
@@ -247,7 +231,7 @@ Set-DbaSpConfigure @splatOle
 ### SQL Server Agent Configuration
 
 ```powershell
-# Start Agent and set to auto-start
+# Set Agent to auto-start
 $splatAgent = @{
     ComputerName    = $instance
     ServiceName     = 'SQLSERVERAGENT'
@@ -258,7 +242,7 @@ Set-DbaService @splatAgent
 
 Start-DbaService -ComputerName $instance -ServiceName 'SQLSERVERAGENT'
 
-# Configure Agent history retention (default 1000 rows per job is too low for active environments)
+# Increase history retention (default 1000 rows per job is too low)
 $splatHistory = @{
     SqlInstance           = $instance
     MaximumHistoryRows    = 10000
@@ -270,12 +254,9 @@ Set-DbaAgentServer @splatHistory
 
 ### Instant File Initialization
 
-IFI allows SQL Server to skip zeroing data file pages during growth events, significantly reducing file growth latency. It is granted by adding the SQL Server service account to the `Perform Volume Maintenance Tasks` local security policy.
+IFI allows SQL Server to skip zeroing data file pages during growth events, significantly reducing growth latency. Grant it by adding the SQL Server service account to the `Perform Volume Maintenance Tasks` local security policy.
 
 ```powershell
-# Verify IFI is enabled (returns True if the service account has the privilege)
-Test-DbaOptimizeForAdHoc -SqlInstance $instance   # not the right cmdlet
-# Check via:
 $splatIfi = @{
     SqlInstance     = $instance
     EnableException = $true
@@ -283,32 +264,25 @@ $splatIfi = @{
 Get-DbaPrivilege @splatIfi | Where-Object Privilege -eq 'SeManageVolumePrivilege'
 ```
 
-If not enabled, grant via Local Security Policy (`secpol.msc`) → Local Policies → User Rights Assignment → Perform volume maintenance tasks → add the SQL Server service account. Restart the SQL Server service to take effect.
+If not enabled, grant via `secpol.msc` → Local Policies → User Rights Assignment → Perform volume maintenance tasks → add the SQL Server service account. Restart the SQL Server service.
 
 ### TLS Configuration
 
-Configure a CA-issued certificate for encrypted connections before opening the instance to applications. See [TLS Configuration](../Security/TLS-Configuration.md) for the full procedure.
-
-Minimum steps for a new instance:
-1. Install a certificate with the server FQDN as the subject
-2. Grant the SQL Server service account read access to the certificate private key
-3. Assign the certificate in SQL Server Configuration Manager → SQL Server Network Configuration → Protocols → Certificate
+Configure a CA-issued certificate before opening the instance to applications. See [[../Security/TLS-Configuration|TLS Configuration]] for the full procedure.
 
 ---
 
 ## Verification
 
-After completing post-installation configuration, run these checks before handing the instance to application teams.
-
 ```powershell
 $instance = 'SqlServer01'
 
-# Instance version and edition
+# Instance version, edition, and collation
 Get-DbaInstanceProperty -SqlInstance $instance |
     Where-Object Name -in 'ProductVersion', 'Edition', 'Collation' |
     Select-Object Name, Value
 
-# Verify key sp_configure settings
+# Key configuration settings
 $splatCfg = @{
     SqlInstance     = $instance
     EnableException = $true
@@ -319,19 +293,16 @@ Get-DbaSpConfigure @splatCfg |
                           'optimize for ad hoc workloads', 'xp_cmdshell', 'remote admin connections' |
     Select-Object Name, ConfiguredValue, RunningValue
 
-# Verify SA is disabled
+# SA is disabled
 Get-DbaLogin -SqlInstance $instance |
     Where-Object { $_.Sid -eq 0x01 } |
     Select-Object Name, IsDisabled
 
-# Verify Agent is running
+# Agent is running
 Get-DbaService -ComputerName $instance -Type Agent |
     Select-Object ServiceName, State, StartMode
 
-# Verify Max Memory was applied
-Get-DbaMaxMemory -SqlInstance $instance
-
-# Run a full backup to verify the backup path and compression work
+# Test backup path and compression
 $splatBackup = @{
     SqlInstance     = $instance
     Database        = 'master'
@@ -362,8 +333,9 @@ ORDER BY [db].[name], [mf].[type_desc];
 
 ## Related Documents
 
-- [Performance Practices](../Performance/PerformancePractices.md) — MAXDOP, Max Server Memory, TempDB, and IFI detail
-- [Security Practices](../Security/Security.md) — SA hardening, surface area reduction, gMSA service accounts
-- [TLS Configuration](../Security/TLS-Configuration.md) — certificate installation and encryption enforcement
-- [Backup and Restore](BackupRestore.md) — backup schedule and verification
-- [Windows Cluster Setup](../Clustering/WindowsClusterSetup.md) — FCI alternative to standalone installation
+- [[../Performance/Performance-Practices|Performance Practices]] — MAXDOP, Max Server Memory, TempDB, and IFI detail
+- [[../Security/Security-Practices|Security Practices]] — SA hardening, surface area reduction, gMSA setup
+- [[../Security/TLS-Configuration|TLS Configuration]] — certificate installation and encryption enforcement
+- [[Backup-and-Restore|Backup and Restore]] — backup schedule and verification
+- [[../Clustering/Windows-Cluster-Setup|Windows Cluster Setup]] — FCI alternative to standalone installation
+- [[Operations|Back to Operations]]

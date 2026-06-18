@@ -29,7 +29,7 @@ A mapped disk scheme is recommended for manageability — it uses a single drive
 | Backups | X:\ | BACKUP01 | 4KB (default) | 250GB | SQL backup files |
 | Quorum | Q:\ | Quorum | 4KB (default) | 2GB | Cluster quorum witness |
 
-The 64KB block size for Data, Log, and TempDB disks aligns with SQL Server's extent size (8 pages × 8KB = 64KB). See the [Performance Practices](../Performance/PerformancePractices.md#disk-configurations) document for a detailed explanation of why this matters.
+The 64KB block size for Data, Log, and TempDB disks aligns with SQL Server's extent size (8 pages × 8KB = 64KB). See [[../Performance/Performance-Practices#disk-configurations|Performance Practices — Disk Configurations]] for a detailed explanation of why this matters.
 
 Verify disk configuration after setup:
 
@@ -67,13 +67,18 @@ Get-ADComputer -Identity 'SqlFciName' -Properties DistinguishedName, Enabled
 The Failover Clustering feature must be installed on **every node** that will participate in the cluster.
 
 ```powershell
-# Install on a single node
+# Install on a single node (2 params — inline)
 Install-WindowsFeature -Name Failover-Clustering -IncludeManagementTools
 
 # Install on multiple nodes remotely
 $nodes = @('ClusterNode01', 'ClusterNode02')
-$nodes | ForEach-Object {
-    Install-WindowsFeature -Name Failover-Clustering -IncludeManagementTools -ComputerName $_
+foreach ($node in $nodes) {
+    $splatFeature = @{
+        Name                   = 'Failover-Clustering'
+        IncludeManagementTools = $true
+        ComputerName           = $node
+    }
+    Install-WindowsFeature @splatFeature
 }
 ```
 
@@ -99,15 +104,15 @@ It's normal for the validation to return warnings, especially if shared storage 
 ```powershell
 $splatCluster = @{
     Name          = 'ClusterName'
-    Node          = 'ClusterNode01', 'ClusterNode02'
+    Node          = @('ClusterNode01', 'ClusterNode02')
     StaticAddress = '10.0.0.50'
     NoStorage     = $true
 }
 New-Cluster @splatCluster
 ```
 
-- `-StaticAddress` — the IP address for the cluster management endpoint. Use an IP on the LAN/client network, not the heartbeat network.
-- `-NoStorage` — skips automatic storage import. Add storage deliberately after creation to maintain control over disk assignments.
+- `StaticAddress` — the IP address for the cluster management endpoint. Use an IP on the LAN/client network, not the heartbeat network.
+- `NoStorage` — skips automatic storage import. Add storage deliberately after creation to maintain control over disk assignments.
 
 Ensure the DNS and Active Directory entries for the cluster name resolve correctly after creation.
 
@@ -118,23 +123,23 @@ The quorum configuration determines how the cluster maintains consensus when nod
 For a two-node cluster, use a **file share witness** or **cloud witness** (Azure blob storage, available on Windows Server 2016+):
 
 ```powershell
-# File share witness
+# File share witness (2 params — inline)
 Set-ClusterQuorum -NodeAndFileShareMajority '\\FileServer01\ClusterWitness'
 
 # Cloud witness (Azure)
-$splatWitness = @{
+$splatQuorum = @{
     CloudWitness = $true
     AccountName  = 'storageaccountname'
     AccessKey    = 'storageaccountkey'
     Endpoint     = 'core.windows.net'
 }
-Set-ClusterQuorum @splatWitness
+Set-ClusterQuorum @splatQuorum
 ```
 
 If using a disk witness instead (requires shared storage):
 
 ```powershell
-# The disk must already be added to the cluster
+# The disk must already be added to the cluster (2 params — inline)
 Set-ClusterQuorum -NodeAndDiskMajority 'Cluster Disk 1'
 ```
 
@@ -151,7 +156,7 @@ Rename disks to match their purpose. The disk number in Failover Cluster Manager
 Get-ClusterResource | Where-Object { $_.ResourceType -eq 'Physical Disk' } |
     Select-Object Name, State, OwnerGroup
 
-# Rename a cluster disk
+# Rename cluster disks
 (Get-ClusterResource 'Cluster Disk 1').Name = 'DATA01'
 (Get-ClusterResource 'Cluster Disk 2').Name = 'LOG01'
 (Get-ClusterResource 'Cluster Disk 3').Name = 'TEMPDB01'
@@ -183,14 +188,8 @@ These settings should be applied on **all cluster nodes** after the cluster is b
 **Disable Volume Shadow Copy (VSS)** if not actively used. VSS snapshots on cluster shared disks can cause unexpected I/O latency and disk space consumption.
 
 ```powershell
-foreach ($node in @('ClusterNode01', 'ClusterNode02')) {
-    $splatVss = @{
-        Name         = 'VSS'
-        StartupType  = 'Disabled'
-        ComputerName = $node
-    }
-    Set-Service @splatVss
-}
+Set-Service -Name VSS -StartupType Disabled -ComputerName ClusterNode01
+Set-Service -Name VSS -StartupType Disabled -ComputerName ClusterNode02
 ```
 
 **Configure the page file** to a fixed size. Auto-managed page files can grow unexpectedly and consume disk space on the OS drive. A fixed size of 30GB is a common starting point for servers with 128GB+ RAM, but the right size depends on your memory dump configuration.
@@ -207,7 +206,7 @@ foreach ($node in @('ClusterNode01', 'ClusterNode02')) {
 | 5022 | TCP | Database mirroring / AG endpoint |
 | 1434 | UDP | SQL Browser (disable if not needed) |
 
-If a non-default port is used for SQL Server (recommended for security — see [Security Practices](../Security/Security.md)), substitute that port for 1433 and ensure the firewall rules match.
+If a non-default port is used for SQL Server (recommended for security — see [[../Security/Security-Practices|Security Practices]]), substitute that port for 1433 and ensure the firewall rules match.
 
 ```powershell
 # Verify existing SQL-related firewall rules
@@ -233,4 +232,8 @@ powercfg /setactive SCHEME_MIN
 powercfg /getactivescheme
 ```
 
-After completing all configuration, proceed to [SQL Server Cluster Installation](SqlClusterInstallation.md).
+After completing all configuration, proceed to [[SQL-Cluster-Installation|SQL Server Cluster Installation]].
+
+## See Also
+
+- [[Clustering|Clustering Index]]

@@ -1,6 +1,6 @@
 # SQL Server Failover Cluster Instance Installation
 
-> **Environment context:** These procedures cover installing SQL Server on a Windows Server Failover Cluster as a Failover Cluster Instance (FCI). The WSFC must already be built and configured before proceeding — see [Windows Failover Cluster Setup](WindowsClusterSetup.md).
+> **Environment context:** These procedures cover installing SQL Server on a Windows Server Failover Cluster as a Failover Cluster Instance (FCI). The WSFC must already be built and configured before proceeding — see [[Windows-Cluster-Setup|Windows Failover Cluster Setup]].
 
 ## Table of Contents
 
@@ -60,11 +60,11 @@ Enter the static IP address and subnet mask for the SQL Server FCI. This IP must
 
 Use a **domain service account** for the SQL Server Database Engine and SQL Server Agent services. Both should use the same account unless security requirements dictate separation.
 
-Check **Grant Perform Volume Maintenance Task** to enable Instant File Initialization — see [Performance Practices](../Performance/PerformancePractices.md#instant-file-initialization) for why this matters.
+Check **Grant Perform Volume Maintenance Task** to enable Instant File Initialization — see [[../Performance/Performance-Practices#instant-file-initialization|Performance Practices — Instant File Initialization]] for why this matters.
 
 ### Server Configuration
 
-Select **Mixed Mode** authentication and set a strong SA password. Even though the SA account should be disabled post-installation (see [Security Practices](../Security/Security.md)), a strong password is required during setup.
+Select **Mixed Mode** authentication and set a strong SA password. Even though the SA account should be disabled post-installation (see [[../Security/Security-Practices|Security Practices]]), a strong password is required during setup.
 
 Add the SQL Server service account and the **Database Admins** security group to the SQL Server Administrators list.
 
@@ -85,7 +85,7 @@ On the TempDB tab:
 
 - **Data directories:** Point to the TempDB disk (T:\TempDB01). Remove the default directory if it points elsewhere.
 - **Log directory:** Point to the Log disk (I:\Log01). TempDB log files go with the other log files, not on the TempDB data disk.
-- **Number of files:** The installer will default to a number based on processor count (up to 8). Accept this or adjust per [Performance Practices](../Performance/PerformancePractices.md#tempdb-configuration).
+- **Number of files:** The installer will default to a number based on processor count (up to 8). Accept this or adjust per [[../Performance/Performance-Practices#tempdb-configuration|Performance Practices — TempDB Configuration]].
 
 After reviewing the summary, click **Install**. At completion, verify in Failover Cluster Manager that SQL Server (MSSQLSERVER) appears under Roles and all dependencies show as **Online**.
 
@@ -123,10 +123,10 @@ Configure max memory immediately. The default is 2,147,483,647 MB (all available
 Test-DbaMaxMemory -SqlInstance SqlFciName
 
 # Apply it
-Set-DbaMaxMemory -SqlInstance SqlFciName -Max <RecommendedValueMB>
+Set-DbaMaxMemory -SqlInstance SqlFciName -Max 111523
 ```
 
-Leave at least **15% of total memory for the OS**. If SSRS or SSIS are installed on the same cluster, increase that to **20–25%**. See [Performance Practices](../Performance/PerformancePractices.md#max-server-memory) for details.
+Leave at least **15% of total memory for the OS**. If SSRS or SSIS are installed on the same cluster, increase that to **20–25%**. See [[../Performance/Performance-Practices#max-server-memory|Performance Practices — Max Server Memory]] for details.
 
 ### TempDB File Sizing
 
@@ -137,7 +137,7 @@ Pre-allocate TempDB data files to equal sizes that consume most of the TempDB di
 Test-DbaTempDbConfig -SqlInstance SqlFciName | Select-Object * | Out-GridView
 ```
 
-All data files must be the same size with the same autogrowth increment. See [Performance Practices](../Performance/PerformancePractices.md#tempdb-configuration) for the full set of recommendations.
+All data files must be the same size with the same autogrowth increment. See [[../Performance/Performance-Practices#tempdb-configuration|Performance Practices — TempDB Configuration]] for the full set of recommendations.
 
 ### MAXDOP and Cost Threshold for Parallelism
 
@@ -146,15 +146,10 @@ All data files must be the same size with the same autogrowth increment. See [Pe
 Test-DbaMaxDop -SqlInstance SqlFciName | Select-Object *
 
 # Apply it
-Set-DbaMaxDop -SqlInstance SqlFciName -MaxDop <RecommendedValue>
+Set-DbaMaxDop -SqlInstance SqlFciName -MaxDop 8
 
 # Set Cost Threshold for Parallelism (default of 5 is too low)
-$splatCtfp = @{
-    SqlInstance = 'SqlFciName'
-    Name        = 'CostThresholdForParallelism'
-    Value       = 50
-}
-Set-DbaSpConfigure @splatCtfp
+Set-DbaSpConfigure -SqlInstance SqlFciName -Name CostThresholdForParallelism -Value 50
 ```
 
 ### Install Utility Stored Procedures
@@ -173,25 +168,27 @@ Install-DbaFirstResponderKit -SqlInstance SqlFciName -Database master
 Install-DbaWhoIsActive -SqlInstance SqlFciName -Database master
 
 # Install Ola Hallengren's Maintenance Solution
-$splatMaint = @{
-    SqlInstance = 'SqlFciName'
-    Database    = 'master'
-    InstallJobs = $true
-    CleanupTime = 168
-    LogToTable  = $true
+$splatMaintenance = @{
+    SqlInstance  = 'SqlFciName'
+    Database     = 'master'
+    InstallJobs  = $true
+    CleanupTime  = 168
+    LogToTable   = $true
 }
-Install-DbaMaintenanceSolution @splatMaint
+Install-DbaMaintenanceSolution @splatMaintenance
 ```
 
 ### Disable the SA Account
 
 ```powershell
-# Rename and disable the SA account
-$query = @"
+$splatSa = @{
+    SqlInstance = 'SqlFciName'
+    Query       = @"
 ALTER LOGIN [sa] WITH NAME = [DisabledSA];
 ALTER LOGIN [DisabledSA] DISABLE;
 "@
-Invoke-DbaQuery -SqlInstance SqlFciName -Query $query
+}
+Invoke-DbaQuery @splatSa
 ```
 
 ### Verify the Installation
@@ -200,10 +197,12 @@ Run a comprehensive check to confirm everything is configured correctly:
 
 ```powershell
 # Overall instance configuration audit
-Test-DbaMaxMemory      -SqlInstance SqlFciName | Out-GridView -Title 'Memory'
-Test-DbaMaxDop         -SqlInstance SqlFciName | Out-GridView -Title 'MAXDOP'
-Test-DbaTempDbConfig   -SqlInstance SqlFciName | Out-GridView -Title 'TempDB'
-Test-DbaDiskAllocation -ComputerName ClusterNode01 | Out-GridView -Title 'Disk'
+$results = @()
+$results += Test-DbaMaxMemory -SqlInstance SqlFciName
+$results += Test-DbaMaxDop -SqlInstance SqlFciName
+$results += Test-DbaTempDbConfig -SqlInstance SqlFciName
+$results += Test-DbaDiskAllocation -ComputerName ClusterNode01
+$results | Out-GridView
 
 # Connectivity test
 Test-DbaConnection -SqlInstance SqlFciName
@@ -226,3 +225,8 @@ Starting with SQL Server 2016, SSMS and SSRS are separate downloads from the SQL
 > [Download SQL Server Data Tools (SSDT)](https://learn.microsoft.com/en-us/sql/ssdt/download-sql-server-data-tools-ssdt)
 
 > **Note:** SSMS, SSRS, and SSDT follow their own release cadences. Always install the latest available version regardless of which SQL Server version the instance runs.
+
+## See Also
+
+- [[Windows-Cluster-Setup|Windows Failover Cluster Setup]]
+- [[Clustering|Clustering Index]]

@@ -2,25 +2,18 @@
 
 ## Purpose
 
-Define how changes reach production: classification, checklist, script conventions, rollback
-requirement, and post-deployment validation. Every change that touches a production SQL Server
-must go through this process. The goal is not bureaucracy — it is repeatability and a clear
-record of what changed, when, and why.
-
-Related documents: [Comment Block Standards](Comment-Blocks.md) |
-[Best Practices](BestPractices.md) |
-[Monitoring](../Operations/Monitoring.md)
+Define how changes reach production: classification, checklist, script conventions, rollback requirement, and post-deployment validation. Every change that touches a production SQL Server must go through this process. The goal is repeatability and a clear record of what changed, when, and why.
 
 ---
 
 ## Change Classification
 
-| Class     | Definition                                   | Examples                                                                 | Approval Required                                       |
-|-----------|----------------------------------------------|--------------------------------------------------------------------------|---------------------------------------------------------|
-| Standard  | Pre-approved, low risk, reversible           | Index rebuild, statistics update, `sp_configure` within approved range   | DBA review only                                         |
-| Normal    | Tested change with defined rollback          | New stored procedure, table alteration, new index                        | DBA + application team sign-off                         |
-| Emergency | Unplanned, production-impacting              | Hotfix for active outage, blocking query kill                            | DBA team lead verbal approval; document after           |
-| Major     | Significant structural change                | New table with FK chains, large data migration, compatibility level change | Full change control board                             |
+| Class | Definition | Examples | Approval Required |
+|---|---|---|---|
+| Standard | Pre-approved, low risk, reversible | Index rebuild, statistics update, `sp_configure` within approved range | DBA review only |
+| Normal | Tested change with defined rollback | New stored procedure, table alteration, new index | DBA + application team sign-off |
+| Emergency | Unplanned, production-impacting | Hotfix for active outage, blocking query kill | DBA team lead verbal approval; document after |
+| Major | Significant structural change | New table with FK chains, large data migration, compatibility level change | Full change control board |
 
 ---
 
@@ -32,7 +25,7 @@ Every Normal and Major change must satisfy all items before a change window is s
 - [ ] Change tested in staging/UAT against a recent production data copy
 - [ ] Rollback script written and tested
 - [ ] Estimated duration documented (script timed in staging)
-- [ ] Backup confirmed current before execution, or a new backup taken
+- [ ] Backup confirmed current, or a new backup taken immediately before
 - [ ] Affected application teams notified with expected window and impact
 - [ ] Monitoring dashboard open during execution
 - [ ] DBA available for the full change window plus 30 minutes post-deployment
@@ -63,8 +56,7 @@ END;
 
 ### 2. Transactional Where Possible
 
-DDL (CREATE TABLE, ALTER TABLE, CREATE INDEX) can be wrapped in a transaction and rolled back
-if validation fails. Always validate inside the transaction before committing.
+DDL can be wrapped in a transaction and rolled back if validation fails. Always validate inside the transaction before committing.
 
 ```sql
 SET NOCOUNT ON;
@@ -73,7 +65,6 @@ BEGIN TRANSACTION;
 
     ALTER TABLE [dbo].[Order] ADD [ShipRegion] nvarchar(50) NULL;
 
-    -- Validate before committing
     IF NOT EXISTS (
         SELECT 1
         FROM   [sys].[columns]
@@ -91,8 +82,7 @@ COMMIT TRANSACTION;
 
 ### 3. Comment Block Header
 
-All deployment scripts must open with the standard comment block. See
-[Comment Block Standards](Comment-Blocks.md) for the full template.
+All deployment scripts must open with the standard comment block. See [[Comment-Blocks|SQL Comment Block Standards]] for the full template.
 
 ```sql
 /*
@@ -108,15 +98,13 @@ All deployment scripts must open with the standard comment block. See
 
 ### 4. Default Target
 
-Scripts must default to the development instance. They should require an explicit parameter
-change or in-script confirmation before executing against a production instance.
+Scripts must default to the development instance. They should require an explicit parameter change or in-script confirmation before executing against production.
 
 ---
 
 ## Rollback Scripts
 
-Write the rollback at the same time as the deployment script — not after the change is
-already in production. A rollback written under pressure during an incident is error-prone.
+Write the rollback at the same time as the deployment script — not after the change is already in production. A rollback written under pressure during an incident is error-prone.
 
 ```sql
 -- Deployment: Add column
@@ -149,40 +137,36 @@ CHG-4821_Add_ShipRegion_ROLLBACK.sql
 
 ## Online vs Offline Operations
 
-Large tables require online operations to avoid blocking application queries during business
-hours. Online operations require Enterprise Edition.
+Large tables require online operations to avoid blocking application queries during business hours. Online operations require Enterprise Edition.
 
 ```sql
 -- Online index rebuild — does not block reads or writes
 ALTER INDEX [IX_Order_CustomerID] ON [dbo].[Order]
 REBUILD WITH (ONLINE = ON);
 
--- Online column addition with default (SQL Server 2012+) — does not block
+-- Online column addition with default — does not block
 ALTER TABLE [dbo].[Order]
 ADD [ProcessedFlag] bit NOT NULL
     CONSTRAINT [DF_Order_ProcessedFlag] DEFAULT 0
     WITH VALUES;
 ```
 
-Operations that cannot be done online and always require a maintenance window:
+Operations that cannot be done online (always require a maintenance window):
 
 - Adding a NOT NULL column without a default to a table with existing rows
 - Changing a column's data type in a way that requires a table rebuild
-- Enabling TDE for the first time (encrypting existing data blocks I/O during initial scan)
-- Enabling or disabling RCSI (acquires a schema modification lock briefly at the moment of
-  the state change)
+- Enabling TDE for the first time
+- Enabling or disabling RCSI
 
 ---
 
 ## Database Version Tracking
 
-Maintain a version table in each managed database to track applied changes. This provides an
-audit trail without relying solely on source control history.
+Maintain a version table in each managed database to track applied changes:
 
 ```sql
 SET NOCOUNT ON;
 
--- Create the version tracking table (run once per database)
 IF NOT EXISTS (
     SELECT 1
     FROM   [sys].[tables]
@@ -207,15 +191,11 @@ INSERT INTO [dbo].[SchemaVersion] ([Version], [Description], [TicketNumber])
 VALUES ('1.4.2', 'Add ShipRegion column to dbo.Order', 'CHG-4821');
 ```
 
-Migration tools (Flyway, Liquibase, DbUp) can automate this tracking. If using a migration
-tool, do not modify the version table manually — the tool owns it.
-
 ---
 
 ## Post-Deployment Validation
 
-Verify expected state before closing the change window. Do not assume the script succeeded
-because it ran without errors — confirm the object state in the catalog.
+Verify expected state before closing the change window. Do not assume the script succeeded because it ran without errors — confirm the object state in the catalog.
 
 ```sql
 SET NOCOUNT ON;
@@ -232,29 +212,9 @@ JOIN [sys].[types]   AS t
     ON [c].[user_type_id] = [t].[user_type_id]
 WHERE [c].[object_id] = OBJECT_ID(N'dbo.Order')
   AND [c].[name]      = N'ShipRegion';
-
--- Verify application can connect and execute key queries
-EXEC [dbo].[usp_OrderGetById] @orderId = 1;
 ```
 
-Confirm with the application team that affected functionality is working before the DBA
-stands down from the change window.
-
----
-
-## DevOps Pipeline Integration
-
-Automated pipelines enforce these standards consistently and eliminate the risk of a manual
-step being skipped under time pressure.
-
-- Scripts must pass a T-SQL linter or style check before a pull request can be merged
-- Migrations run automatically against dev and staging environments on pull request creation
-- Production deployments require a manual approval gate in the pipeline
-- The pipeline verifies that a rollback script exists alongside every deployment script before
-  approving the production run
-
-Tools in common use: SSDT (SQL Server Data Tools) for schema comparison deployments, Flyway
-or DbUp for migration-based deployments with automatic version tracking.
+Confirm with the application team that affected functionality is working before the DBA stands down from the change window.
 
 ---
 
@@ -263,11 +223,16 @@ or DbUp for migration-based deployments with automatic version tracking.
 When production is down, the process is abbreviated — not skipped.
 
 1. Get verbal approval from the DBA team lead before making any change.
-2. Take a targeted backup if time permits. At minimum, record the exact current state of the
-   affected objects (scripted table definition, current `sp_configure` values, etc.).
+2. Take a targeted backup if time permits. At minimum, record the current state of the affected objects.
 3. Apply the fix.
-4. Document the change immediately after the incident is resolved: what was applied, when, by
-   whom, and why.
-5. Conduct a post-incident review within 48 hours. Determine whether a follow-up Normal change
-   is required — for example, an index added as an emergency hotfix should be formally reviewed,
-   tested for regressions, and documented through the standard process.
+4. Document the change immediately after the incident: what was applied, when, by whom, and why.
+5. Conduct a post-incident review within 48 hours. Determine whether a follow-up Normal change is required — for example, an index added as an emergency hotfix should be formally reviewed and documented through the standard process.
+
+---
+
+## Related Documents
+
+- [[Comment-Blocks|SQL Comment Block Standards]] — comment block header template
+- [[Development-and-Configuration-Standards|Development and Configuration Standards]] — T-SQL coding standards
+- [[../Operations/Monitoring|Monitoring]] — monitoring during change windows
+- [[Standards|Back to Standards]]

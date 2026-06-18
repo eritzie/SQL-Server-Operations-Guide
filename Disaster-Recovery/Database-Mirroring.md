@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Document database mirroring as a controlled migration tool for moving databases between SQL Server instances with minimal downtime. Mirroring is deprecated in SQL Server 2012 and later and is not used here as an ongoing HA solution — use log shipping for sustained DR. Its value is as a synchronous data-transfer mechanism for instance migrations: bring up the mirror, let it synchronize completely, then cut over with a known zero-data-loss state.
+Document database mirroring as a controlled migration tool for moving databases between SQL Server instances with minimal downtime. Mirroring is deprecated in SQL Server 2012 and later and is not used here as an ongoing HA solution — use log shipping for sustained DR. Its value in this environment is as a synchronous data-transfer mechanism for instance migrations: bring up the mirror, let it synchronize completely, then cut over with a known zero-data-loss state.
 
-Always On Availability Groups is the preferred HA tool but requires Enterprise Edition licensing.
+Always On Availability Groups would be the preferred HA tool but require Enterprise Edition licensing, which is not in use in this environment.
 
 ---
 
@@ -16,7 +16,7 @@ Always On Availability Groups is the preferred HA tool but requires Enterprise E
 - Supports only one-to-one database pairing. For multiple databases, configure mirroring independently per database — there is no group failover.
 - Requires **FULL** recovery model on the principal database. Simple-recovery databases cannot be mirrored.
 - SQL Server 2022 targets: the mirroring endpoint must be created via T-SQL. SSMS may not expose the mirroring wizard on 2022 instances.
-- Port 5022 must be open bidirectionally between principal and mirror.
+- Port 5022 must be open bidirectionally between principal and mirror — see firewall rules in [[Windows-Cluster-Setup|Windows Cluster Setup]].
 
 ---
 
@@ -153,8 +153,6 @@ A redo queue that is not dropping toward 0 under normal load indicates a perform
 2. Stop application traffic to the principal database. Verify no active connections remain:
 
 ```sql
-SET NOCOUNT ON;
-
 SELECT [session_id], [login_name], [host_name], [program_name]
 FROM [sys].[dm_exec_sessions]
 WHERE [database_id] = DB_ID(N'DatabaseName')
@@ -172,8 +170,6 @@ The former mirror is now the principal. The former principal enters a `SUSPENDED
 4. Verify the new principal:
 
 ```sql
-SET NOCOUNT ON;
-
 -- Run on the new principal (former mirror)
 SELECT
     DB_NAME([database_id])  AS [database],
@@ -202,7 +198,24 @@ RESTORE DATABASE [DatabaseName] WITH RECOVERY;
 
 ---
 
+## GP Databases and Mirroring
+
+GP is entirely unaware of mirroring. It connects to whatever instance the connection string points to and does not monitor mirroring state.
+
+**Rules for mirroring GP databases:**
+
+- Mirror **DYNAMICS and all company databases simultaneously**. GP joins across DYNAMICS and company databases in the same query — failing over only some of them will break GP immediately.
+- Do not perform mirroring cutover during business hours or during GP posting windows.
+- After failover, GP service accounts must be verified as `db_owner` on all company databases on the new principal — confirm before restarting GP services.
+- Reconfigure GP through **Dynamics GP Utilities** to point to the new instance after cutover. Do not update only the connection string — GP Utilities must register the new instance in DYNAMICS.
+- See [[Dynamics-GP-Impact-Reference|Dynamics GP Impact Reference]] for the complete GP operations impact matrix.
+
+---
+
 ## Related Documents
 
-- [Log Shipping Setup](LogShipping.md) — preferred ongoing DR approach
-- [Log Shipping Failover](LogShippingFailover.md) — log shipping failover and failback
+- [[Disaster-Recovery|Disaster Recovery]] — DR strategy overview
+- [[Log-Shipping-Setup|Log Shipping Setup]] — preferred ongoing DR approach
+- [[Log-Shipping-Failover|Log Shipping Failover]] — log shipping failover and failback
+- [[Dynamics-GP-Impact-Reference|Dynamics GP Impact Reference]] — GP constraints and cutover coordination
+- [[../Index|Back to Index]]

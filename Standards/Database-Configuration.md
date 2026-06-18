@@ -4,6 +4,8 @@
 
 Define the ALTER DATABASE settings that every managed database should have audited and corrected. These are the configuration hygiene items that get missed during initial deployment and accumulate silently — auto-shrink, percentage autogrowth, missing CHECKSUM, wrong compat level. This document covers what each setting does, what the correct value is, and how to detect and fix deviations across all databases.
 
+> **Dynamics GP:** Do not change database settings on GP system or company databases without first confirming compatibility with the installed GP version. See [[Dynamics-GP-Standards|Dynamics GP Standards]].
+
 ---
 
 ## Configuration Reference
@@ -13,7 +15,7 @@ Define the ALTER DATABASE settings that every managed database should have audit
 | `AUTO_CLOSE` | OFF | OFF (correct by default) | ON destroys connection pooling and causes plan cache churn on every connection |
 | `AUTO_SHRINK` | OFF | OFF (correct by default) | ON causes perpetual shrink/grow cycles, fragmenting data and wasting CPU |
 | `AUTO_CREATE_STATISTICS` | ON | ON (correct) | Needed for optimizer to build statistics on unindexed columns |
-| `AUTO_UPDATE_STATISTICS` | ON | ON (correct) | Required for stale statistics correction; see [Statistics Management](Statistics-Management.md) |
+| `AUTO_UPDATE_STATISTICS` | ON | ON (correct) | Required for stale statistics correction; see [[Statistics-Management\|Statistics Management]] |
 | `PAGE_VERIFY` | CHECKSUM | CHECKSUM (correct on new DBs) | Detects torn page and corruption on disk read; older databases may still have TORN_PAGE_DETECTION |
 | Autogrowth unit | Fixed MB | Often % on inherited databases | Percentage growth produces unpredictably large events at scale; 256 MB for data, 64 MB for log |
 | `TARGET_RECOVERY_INTERVAL` | 60 seconds | 60s (SQL 2016+) | Indirect checkpoints smooth I/O; older databases on 2016+ instances retain the old 0-second value if never touched |
@@ -142,7 +144,7 @@ ALTER DATABASE [DatabaseName] SET COMPATIBILITY_LEVEL = 150;
 | 2019 | 150 |
 | 2022 | 160 |
 
-Change compatibility level only after reviewing the query regression risk. Run a query workload baseline before and after in development. Query Store makes this manageable — see [Query Store](../Operations/Query-Store.md).
+Change compatibility level only after reviewing the query regression risk. Run a query workload baseline before and after in development. Query Store makes this manageable — see [[../Operations/Query-Store|Query Store]].
 
 ---
 
@@ -194,6 +196,8 @@ FROM   [sys].[databases]
 WHERE  [name] = N'DatabaseName';
 ```
 
+> **Dynamics GP:** GP databases may already have RCSI enabled by the GP installer. Verify before changing. Some GP versions behave incorrectly if RCSI is disabled. Never disable RCSI on a GP company database without confirming with Microsoft GP support. See [[Dynamics-GP-Standards|Dynamics GP Standards]].
+
 ---
 
 ## Applying Settings at Scale
@@ -206,24 +210,26 @@ $targetDatabases = Get-DbaDatabase -SqlInstance $instance |
 
 foreach ($db in $targetDatabases) {
     [PSCustomObject]@{
-        SqlInstance   = $db.SqlInstance
-        Database      = $db.Name
-        AutoClose     = $db.AutoClose
-        AutoShrink    = $db.AutoShrink
-        PageVerify    = $db.PageVerify
+        SqlInstance  = $db.SqlInstance
+        Database     = $db.Name
+        AutoClose    = $db.AutoClose
+        AutoShrink   = $db.AutoShrink
+        PageVerify   = $db.PageVerify
         RecoveryModel = $db.RecoveryModel
-        CompatLevel   = $db.Compatibility
+        CompatLevel  = $db.Compatibility
     }
 }
 ```
 
-Use the output to build a targeted list of databases to correct rather than applying changes blindly to all databases. Some databases — third-party vendor databases — may have intentional deviations.
+Use the output to build a targeted list of databases to correct rather than applying changes blindly to all databases. Some databases — GP company databases, third-party vendor databases — may have intentional deviations.
 
 ---
 
 ## Related Documents
 
-- [Statistics Management](Statistics-Management.md) — AUTO_UPDATE_STATISTICS behavior and manual update patterns
-- [Query Store](../Operations/Query-Store.md) — managing compat level changes with query regression safety net
-- [Deadlock Analysis](../Operations/Deadlock-Analysis.md) — RCSI as a deadlock mitigation
-- [Capacity Planning](../Operations/Capacity-Planning.md) — TempDB sizing for version store
+- [[Statistics-Management|Statistics Management]] — AUTO_UPDATE_STATISTICS behavior and manual update patterns
+- [[../Operations/Query-Store|Query Store]] — managing compat level changes with query regression safety net
+- [[../Operations/Deadlock-Analysis|Deadlock Analysis]] — RCSI as a deadlock mitigation
+- [[../Operations/Capacity-Planning|Capacity Planning]] — TempDB sizing for version store
+- [[Dynamics-GP-Standards|Dynamics GP Standards]] — GP-specific database configuration cautions
+- [[Standards|Back to Standards]]

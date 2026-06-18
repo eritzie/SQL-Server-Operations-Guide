@@ -2,11 +2,13 @@
 
 ## Purpose
 
-Define standards for creating, naming, configuring, and auditing SQL Server Agent jobs. Job monitoring procedures (checking failures, identifying long-running jobs, reviewing history) are in [Monitoring](../Operations/Monitoring.md). This document covers how jobs must be built before they go to production.
+Define standards for creating, naming, configuring, and auditing SQL Server Agent jobs. Job monitoring procedures (checking failures, identifying long-running jobs, reviewing history) are in [[Monitoring|Monitoring]]. This document covers how jobs must be built before they go to production.
 
 ---
 
 ## Naming
+
+See [[Naming-Conventions|Naming Conventions]] for the full format. Summary:
 
 Format: `{Category} - {Action} - {Scope}`
 
@@ -16,6 +18,7 @@ Format: `{Category} - {Action} - {Scope}`
 | `APP` | Application-owned jobs deployed by the app team |
 | `MAINT` | Maintenance Solution jobs (Ola Hallengren) |
 | `REPL` | Replication agent jobs |
+| `GP` | Dynamics GP internal and GP-supporting jobs |
 
 **Exception:** Ola Hallengren Maintenance Solution and SQL Server replication agent jobs retain their default names. They are well-known, widely referenced in external documentation, and searchable by name — renaming them creates operational confusion.
 
@@ -69,8 +72,6 @@ ORDER BY p.[name];
 The SQL Server Agent default history limits (1,000 rows per job, 10,000 rows total) are too low for environments with active maintenance schedules. Increase limits immediately after installation or if jobs are losing history:
 
 ```sql
-SET NOCOUNT ON;
-
 EXEC [msdb].[dbo].[sp_set_sqlagent_properties]
     @jobhistory_max_rows         = 50000,
     @jobhistory_max_rows_per_job = 5000;
@@ -177,5 +178,7 @@ Get-DbaAgentJob @splatJobs |
 
 ## Related Documents
 
-- [Monitoring](../Operations/Monitoring.md) — checking job history, failures, and long-running jobs
-- [Ola Hallengren Maintenance Solution](../Operations/Maintenance-Solution.md) — maintenance job setup and scheduling
+- [[Naming-Conventions|Naming Conventions]] — job naming format and category definitions
+- [[Monitoring|Monitoring]] — checking job history, failures, and long-running jobs
+- [[Maintenance-Solution|Ola Hallengren Maintenance Solution]] — maintenance job setup and scheduling
+- [[../Index|Back to Index]]

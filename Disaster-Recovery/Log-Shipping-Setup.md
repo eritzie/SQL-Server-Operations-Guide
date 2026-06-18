@@ -41,13 +41,9 @@ The secondary database remains in either **NORECOVERY** or **STANDBY** mode unti
 Verify the recovery model of your databases:
 
 ```sql
-SET NOCOUNT ON;
-
-SELECT
-    [name],
-    [recovery_model_desc]
-FROM [sys].[databases]
-WHERE [database_id] > 4;
+SELECT name, recovery_model_desc
+FROM sys.databases
+WHERE database_id > 4;
 ```
 
 ```powershell
@@ -93,39 +89,35 @@ The following example loops through all user databases on the primary server and
 ```powershell
 $cred = Get-Credential "$env:USERDOMAIN\$env:USERNAME"
 # Exclude utility and infrastructure databases that don't need log shipping
-$splatDbs = @{
-    SqlInstance     = 'PrimaryServer01'
-    ExcludeSystem   = $true
-    ExcludeDatabase = 'ReportServer', 'ReportServerTempDB', 'DBAOps', 'SSISDB'
-}
-$databases = Get-DbaDatabase @splatDbs |
+$databases = Get-DbaDatabase -SqlInstance PrimaryServer01 -ExcludeSystem `
+    -ExcludeDatabase ReportServer, ReportServerTempDB, DBAOps, SSISDB |
     Select-Object -ExpandProperty Name |
     Sort-Object
 
 foreach ($db in $databases) {
     $splatLogShip = @{
-        SourceSqlInstance                = 'PrimaryServer01'
-        SourceSqlCredential             = $cred
-        DestinationSqlInstance          = 'SecondaryServer01'
-        DestinationSqlCredential        = $cred
-        Database                        = $db
-        SharedPath                      = '\\PrimaryServer01\Backups\LogShipping\Source'
-        LocalPath                       = 'X:\Backups\LogShipping\Source'
-        BackupScheduleFrequencyType     = 'Daily'
-        BackupScheduleFrequencyInterval = 1
+        SourceSqlInstance                     = 'PrimaryServer01'
+        SourceSqlCredential                   = $cred
+        DestinationSqlInstance                = 'SecondaryServer01'
+        DestinationSqlCredential              = $cred
+        Database                              = $db
+        SharedPath                            = '\\PrimaryServer01\Backups\LogShipping\Source'
+        LocalPath                             = 'X:\Backups\LogShipping\Source'
+        BackupScheduleFrequencyType           = 'Daily'
+        BackupScheduleFrequencyInterval       = 1
         BackupScheduleFrequencySubdayType     = 'Minutes'
         BackupScheduleFrequencySubdayInterval = 5
-        CompressBackup                  = $true
-        GenerateFullBackup              = $true
-        CopyDestinationFolder           = '\\SecondaryServer01\Backups\LogShipping\Destination'
-        CopyScheduleFrequencyType       = 'Daily'
-        CopyScheduleFrequencyInterval   = 1
+        CompressBackup                        = $true
+        GenerateFullBackup                    = $true
+        CopyDestinationFolder                 = '\\SecondaryServer01\Backups\LogShipping\Destination'
+        CopyScheduleFrequencyType             = 'Daily'
+        CopyScheduleFrequencyInterval         = 1
         CopyScheduleFrequencySubdayType       = 'Minutes'
         CopyScheduleFrequencySubdayInterval   = 5
-        RestoreAlertThreshold           = 300
-        RestoreScheduleFrequencyType    = 'Daily'
-        RestoreScheduleFrequencyInterval = 1
-        RestoreScheduleFrequencySubdayType     = 'Hours'
+        RestoreAlertThreshold                 = 300
+        RestoreScheduleFrequencyType          = 'Daily'
+        RestoreScheduleFrequencyInterval      = 1
+        RestoreScheduleFrequencySubdayType    = 'Hours'
         RestoreScheduleFrequencySubdayInterval = 4
     }
     Invoke-DbaDbLogShipping @splatLogShip
@@ -146,13 +138,13 @@ Log shipping only replicates database contents. It does **not** transfer server-
 The [`Start-DbaMigration`](https://docs.dbatools.io/#Start-DbaMigration) command copies all server-level objects from one instance to another. The `-Exclude Databases` flag skips the databases themselves (since log shipping handles those).
 
 ```powershell
-$splatMigration = @{
+$splatMigrate = @{
     Source      = 'PrimaryServer01'
     Destination = 'SecondaryServer01'
     Exclude     = 'Databases'
 }
 
-Start-DbaMigration @splatMigration -Verbose
+Start-DbaMigration @splatMigrate -Verbose
 ```
 
 This copies:
@@ -185,23 +177,24 @@ Log shipping status should be monitored to catch backup, copy, or restore failur
 Check the current state of log shipping on the secondary:
 
 ```sql
-SET NOCOUNT ON;
-
 SELECT
-    [secondary_database],
-    [last_copied_file],
-    [last_copied_date],
-    [last_restored_file],
-    [last_restored_date],
-    [last_restored_latency]
-FROM [msdb].[dbo].[log_shipping_monitor_secondary];
+    secondary_database,
+    last_copied_file,
+    last_copied_date,
+    last_restored_file,
+    last_restored_date,
+    last_restored_latency
+FROM msdb.dbo.log_shipping_monitor_secondary;
 ```
 
 ```powershell
 Get-DbaDbLogShipError -SqlInstance SecondaryServer01
 
 # Check overall log shipping status
-Invoke-DbaQuery -SqlInstance SecondaryServer01 -Database msdb -Query @"
+$splatQuery = @{
+    SqlInstance = 'SecondaryServer01'
+    Database    = 'msdb'
+    Query       = @"
 SELECT
     secondary_database,
     last_copied_file,
@@ -211,10 +204,16 @@ SELECT
     last_restored_latency
 FROM dbo.log_shipping_monitor_secondary;
 "@
+}
+Invoke-DbaQuery @splatQuery
 ```
 
 Key things to watch for: `last_restored_latency` climbing beyond your alert threshold, and gaps between `last_copied_date` and `last_restored_date` that exceed your restore schedule interval.
 
 ## Failover Procedures
 
-For detailed failover, failback, and traffic redirection procedures, see [Log Shipping Failover and Failback Procedures](LogShippingFailover.md).
+For detailed failover, failback, and traffic redirection procedures, see [[Log-Shipping-Failover|Log Shipping Failover and Failback Procedures]].
+
+## See Also
+
+- [[Disaster-Recovery|Disaster Recovery Index]]

@@ -8,12 +8,14 @@ Define standards for creating, securing, and auditing linked servers. Linked ser
 
 ## Naming
 
+See [[Naming-Conventions|Naming Conventions]] for the format. Summary:
+
 Format: `{HOST}_{INSTANCE}` — mirrors the instance slug convention (backslash replaced with underscore).
 
 | Linked Server Name | Points To |
 |---|---|
-| `SOURCE-SQL_INST` | `SOURCE-SQL\INST` (named instance) |
-| `SOURCE-SQL` | `SOURCE-SQL` (default instance) |
+| `SQL-RPL-NEW_RPL` | `SQL-RPL-NEW\RPL` |
+| `SQL-ERP` | `SQL-ERP` (default instance) |
 
 Use the physical host and instance name. Never use a friendly alias — the physical target must be immediately identifiable during an incident.
 
@@ -48,12 +50,12 @@ Apply these settings to every linked server at creation time:
 ```sql
 -- Set security options after creation
 EXEC [sys].[sp_serveroption]
-    @server     = N'<linked-server-name>',
+    @server     = N'SQL-RPL-NEW_RPL',
     @optname    = N'rpc out',
     @optvalue   = N'false';
 
 EXEC [sys].[sp_serveroption]
-    @server     = N'<linked-server-name>',
+    @server     = N'SQL-RPL-NEW_RPL',
     @optname    = N'rpc',
     @optvalue   = N'false';
 ```
@@ -68,10 +70,10 @@ Use dbatools where possible. Manual T-SQL creation is acceptable for one-off set
 # Create a linked server using Windows auth (caller's context)
 $splatLs = @{
     SqlInstance         = $instance
-    LinkedServer        = '<linked-server-name>'
+    LinkedServer        = 'SQL-RPL-NEW_RPL'
     ServerProduct       = 'SQL Server'
-    Provider            = 'SQLNCLI'
-    DataSource          = '<target-host>\<target-instance>'
+    Provider            = 'MSOLEDBSQL'
+    DataSource          = 'SQL-RPL-NEW\RPL'
     EnableException     = $true
 }
 New-DbaLinkedServer @splatLs
@@ -159,5 +161,7 @@ Avoid linked servers for:
 
 ## Related Documents
 
-- [Security](../Security/Security.md) — general authentication and access control standards
-- [Transactional Replication](../Operations/Replication.md) — preferred approach for ongoing cross-instance data distribution
+- [[Naming-Conventions|Naming Conventions]] — linked server naming format
+- [[Security-Practices|Security Practices]] — general authentication and access control standards
+- [[Replication|Transactional Replication]] — preferred approach for ongoing cross-instance data distribution
+- [[../Index|Back to Index]]

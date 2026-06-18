@@ -68,8 +68,12 @@ The following steps must be run for each database you need to restore to the pri
 1. Stop all application traffic to the secondary server. Coordinate with the network team to ensure no connections are active. Verify with `sp_WhoIsActive` or:
 
 ```powershell
-Get-DbaProcess -SqlInstance SecondaryServer01 -Database DatabaseName -ExcludeSystemSpids |
-    Select-Object Spid, Login, Host, Database, Program
+$splatProc = @{
+    SqlInstance        = 'SecondaryServer01'
+    Database           = 'DatabaseName'
+    ExcludeSystemSpids = $true
+}
+Get-DbaProcess @splatProc | Select-Object Spid, Login, Host, Database, Program
 ```
 
 2. Disable all backup SQL Agent jobs on the secondary server:
@@ -92,11 +96,11 @@ WITH
 
 ```powershell
 $splatBackup = @{
-    SqlInstance    = 'SecondaryServer01'
-    Database       = 'DatabaseName'
-    Path           = 'X:\Backups'
-    Type           = 'Full'
-    CompressBackup = $true
+    SqlInstance     = 'SecondaryServer01'
+    Database        = 'DatabaseName'
+    Path            = 'X:\Backups'
+    Type            = 'Full'
+    CompressBackup  = $true
 }
 Backup-DbaDatabase @splatBackup
 ```
@@ -112,12 +116,7 @@ WITH
 ```
 
 ```powershell
-$splatRestore = @{
-    SqlInstance = 'PrimaryServer01'
-    Path        = 'X:\Backups\DatabaseName_full.bak'
-    WithReplace = $true
-}
-Restore-DbaDatabase @splatRestore
+Restore-DbaDatabase -SqlInstance PrimaryServer01 -Path X:\Backups\DatabaseName_full.bak -WithReplace
 ```
 
 5. Enable backup SQL Agent jobs on the primary server.
@@ -135,13 +134,13 @@ The [`Copy-DbaDatabase`](https://docs.dbatools.io/#Copy-DbaDatabase) command han
 ```powershell
 # Copy all databases
 $splatCopyAll = @{
-    Source        = 'SecondaryServer01'
-    Destination   = 'PrimaryServer01'
+    Source       = 'SecondaryServer01'
+    Destination  = 'PrimaryServer01'
     BackupRestore = $true
-    SharedPath    = '\\PrimaryServer01\Backups'
-    AllDatabases  = $true
-    NoCopyOnly    = $true
-    Force         = $true
+    SharedPath   = '\\PrimaryServer01\Backups'
+    AllDatabases = $true
+    NoCopyOnly   = $true
+    Force        = $true
 }
 Copy-DbaDatabase @splatCopyAll
 
@@ -170,7 +169,7 @@ Get-DbaAgentJob -SqlInstance PrimaryServer01 |
 
 ## Reestablish Log Shipping
 
-Once the primary server is taking production traffic again, rebuild log shipping to the secondary server following the standard setup procedure documented in [Log Shipping Setup](LogShipping.md).
+Once the primary server is taking production traffic again, rebuild log shipping to the secondary server following the standard setup procedure documented in [[Log-Shipping-Setup|Log Shipping Setup]].
 
 Before reinitializing, clean up the secondary server:
 
@@ -190,3 +189,8 @@ Redirecting application traffic after a failover or failback can be done through
 **Application configuration:** Update connection strings in application config files, web.config, or environment variables. This gives you immediate, deterministic control with no TTL delay, but requires restarting or redeploying the application.
 
 **SQL Server client alias:** Create a SQL Server client alias on the application servers via SQL Server Configuration Manager or `cliconfg.exe`. The alias maps a logical server name to a physical server/IP, so applications don't need config changes — only the alias target changes. This works well in environments where multiple applications connect to the same logical name.
+
+## See Also
+
+- [[Log-Shipping-Setup|Log Shipping Setup]]
+- [[Disaster-Recovery|Disaster Recovery Index]]

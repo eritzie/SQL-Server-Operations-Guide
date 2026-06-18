@@ -1,6 +1,6 @@
 # SQL Server Development and Configuration Standards
 
-> **Environment context:** These standards were developed for SQL Server environments supporting both OLTP and reporting workloads. They cover database design, T-SQL development practices, and instance configuration baselines. For security-specific guidance, see [Security Practices](../Security/Security.md). For performance tuning, see [Performance Practices](../Performance/PerformancePractices.md).
+> **Environment context:** These standards were developed for SQL Server environments supporting both OLTP and reporting workloads. They cover database design, T-SQL development practices, and instance configuration baselines. For security-specific guidance, see [[../Security/Security-Practices|Security Practices]]. For performance tuning, see [[../Performance/Performance-Practices|Performance Practices]].
 
 ## Table of Contents
 
@@ -18,13 +18,13 @@ Every SQL Server instance should have these settings verified after installation
 
 | Setting | Recommended Value | Reference |
 |---|---|---|
-| Max Server Memory | ~85% of total RAM (more if SSRS/SSIS coexist) | [Performance Practices](../Performance/PerformancePractices.md#max-server-memory) |
-| MAXDOP | Based on NUMA topology | [Performance Practices](../Performance/PerformancePractices.md#max-degree-of-parallelism-maxdop) |
-| Cost Threshold for Parallelism | 50 (starting point) | [Performance Practices](../Performance/PerformancePractices.md#cost-threshold-for-parallelism) |
-| Instant File Initialization | Enabled | [Performance Practices](../Performance/PerformancePractices.md#instant-file-initialization) |
-| SA Account | Renamed and disabled | [Security Practices](../Security/Security.md#sa-account-hardening) |
-| xp_cmdshell | Disabled | [Security Practices](../Security/Security.md#surface-area-reduction) |
-| Data/Log/TempDB disk block size | 64KB | [Performance Practices](../Performance/PerformancePractices.md#disk-configurations) |
+| Max Server Memory | ~85% of total RAM (more if SSRS/SSIS coexist) | [[../Performance/Performance-Practices#max-server-memory\|Performance Practices — Max Server Memory]] |
+| MAXDOP | Based on NUMA topology | [[../Performance/Performance-Practices#max-degree-of-parallelism-maxdop\|Performance Practices — MAXDOP]] |
+| Cost Threshold for Parallelism | 50 (starting point) | [[../Performance/Performance-Practices#cost-threshold-for-parallelism\|Performance Practices — CTFP]] |
+| Instant File Initialization | Enabled | [[../Performance/Performance-Practices#instant-file-initialization\|Performance Practices — IFI]] |
+| SA Account | Renamed and disabled | [[../Security/Security-Practices#sa-account-hardening\|Security Practices — SA Hardening]] |
+| xp_cmdshell | Disabled | [[../Security/Security-Practices#surface-area-reduction\|Security Practices — Surface Area Reduction]] |
+| Data/Log/TempDB disk block size | 64KB | [[../Performance/Performance-Practices#disk-configurations\|Performance Practices — Disk Configurations]] |
 | Backup compression default | Enabled | See below |
 | Optimize for ad hoc workloads | Enabled | See below |
 | Remote admin connections (DAC) | Enabled | See below |
@@ -156,15 +156,12 @@ Consistent naming makes code easier to read, maintain, and search. These convent
 |---|---|---|
 | Tables | PascalCase, singular noun | `Customer`, `OrderDetail` |
 | Stored procedures | `usp_` prefix, PascalCase | `usp_GetCustomerOrders` |
-| Scalar functions | `fn_` prefix, PascalCase | `fn_CalculateTax` |
-| Table-valued functions | `tvf_` prefix, PascalCase | `tvf_GetOrdersByDate` |
+| Functions | `ufn_` prefix, PascalCase | `ufn_CalculateTax` |
 | Views | `vw_` prefix, PascalCase | `vw_ActiveCustomers` |
 | Indexes | `IX_TableName_Column(s)` | `IX_Orders_CustomerId` |
 | Primary keys | `PK_TableName` | `PK_Customer` |
 | Foreign keys | `FK_ChildTable_ParentTable` | `FK_OrderDetail_Order` |
 | Default constraints | `DF_TableName_Column` | `DF_Customer_CreatedDate` |
-
-For the complete naming reference including servers, disks, logins, constraints, triggers, and variables, see [Naming Conventions](Naming-Conventions.md).
 
 ## Stored Procedures over Inline Queries
 
@@ -180,7 +177,7 @@ Applications should use stored procedures rather than inline SQL queries. The ad
 
 ## Indexing Guidelines
 
-Indexes are covered in depth in [Performance Practices](../Performance/PerformancePractices.md#missing-indexes), but these design-time guidelines are worth calling out separately.
+Indexes are covered in depth in [[../Performance/Performance-Practices#missing-indexes|Performance Practices — Missing Indexes]], but these design-time guidelines are worth calling out separately.
 
 **Favor integer columns for indexed columns.** Integer comparisons are faster than string comparisons. If you're filtering or joining on a string column frequently, consider whether a surrogate integer key would be more efficient.
 
@@ -195,8 +192,11 @@ Indexes are covered in depth in [Performance Practices](../Performance/Performan
 Find-DbaDbDuplicateIndex -SqlInstance SqlServer01 | Out-GridView
 
 # Analyze index usage across all databases
-Invoke-DbaQuery -SqlInstance SqlServer01 -Query "EXEC sp_BlitzIndex @GetAllDatabases = 1;" |
-    Out-GridView
+$splatBlitz = @{
+    SqlInstance = 'SqlServer01'
+    Query       = 'EXEC sp_BlitzIndex @GetAllDatabases = 1;'
+}
+Invoke-DbaQuery @splatBlitz | Out-GridView
 ```
 
 ## Reporting Database Design
@@ -243,6 +243,7 @@ foreach ($inst in $instances) {
 
 ## See Also
 
-- [Security Practices](../Security/Security.md)
-- [Performance Practices](../Performance/PerformancePractices.md)
-- [SQL Standards and Policies](SQL-Standards-and-Policies.md)
+- [[../Security/Security-Practices|Security Practices]]
+- [[../Performance/Performance-Practices|Performance Practices]]
+- [[SQL-Standards-and-Policies|SQL Standards and Policies]]
+- [[Standards|Standards Index]]

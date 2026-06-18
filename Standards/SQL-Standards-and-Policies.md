@@ -6,7 +6,7 @@ Define mandatory standards and governance controls for SQL Server operations, co
 
 ## Scope
 
-This policy applies to all SQL Server instances, databases, jobs, availability groups, linked servers, and associated operational processes managed by the DBA team.
+This policy applies to all SQL Server instances, databases, jobs, availability groups, linked servers, and associated operational processes managed by Outdoor Network.
 
 ## Responsibilities
 
@@ -62,8 +62,8 @@ This policy applies to all SQL Server instances, databases, jobs, availability g
 
 ## Documentation Standards
 
-- Store operational procedures in a central documentation repository.
-- Keep instance-level notes organized by server name.
+- Store operational procedures in `Operations/Documents`.
+- Keep instance-level notes under `Instances/<instance>/...`.
 - Use clear, concise titles and add a date/version note for major updates.
 - Document exceptions with justification and approval metadata.
 
@@ -77,7 +77,7 @@ This policy applies to all SQL Server instances, databases, jobs, availability g
 
 ## Configuration Compliance Audit
 
-The following dbatools script checks each instance against the core configuration standards above. It does not replace the CIS Benchmark audit in [Security Practices](../Security/Security.md) — that covers security-specific controls. This script focuses on operational settings that affect reliability, recoverability, and performance.
+The following dbatools script checks each instance against the core configuration standards above. It does not replace the CIS Benchmark audit in [[../Security/Security-Practices|Security Practices]] — that covers security-specific controls. This script focuses on operational settings that affect reliability, recoverability, and performance.
 
 ```powershell
 [CmdletBinding()]
@@ -106,15 +106,15 @@ foreach ($instance in $SqlInstance) {
     $dac = (Get-DbaSpConfigure -SqlInstance $instance -Name RemoteDacConnectionsEnabled).ConfiguredValue
 
     # Max memory
-    $memRec    = Test-DbaMaxMemory -SqlInstance $instance
+    $memRec = Test-DbaMaxMemory -SqlInstance $instance
     $memStatus = if ($memRec.CurrentMaxValue -le $memRec.RecommendedValue) { 'OK' } else { 'OVER' }
 
     # MAXDOP
-    $dopRec    = Test-DbaMaxDop -SqlInstance $instance
+    $dopRec = Test-DbaMaxDop -SqlInstance $instance
     $dopStatus = if ($dopRec.CurrentInstanceMaxDop -eq $dopRec.RecommendedMaxDop) { 'OK' } else { 'DRIFT' }
 
     # CTFP
-    $ctfp       = (Get-DbaSpConfigure -SqlInstance $instance -Name CostThresholdForParallelism).ConfiguredValue
+    $ctfp = (Get-DbaSpConfigure -SqlInstance $instance -Name CostThresholdForParallelism).ConfiguredValue
     $ctfpStatus = if ($ctfp -ge 25) { 'OK' } else { 'LOW' }
 
     # Databases with autoshrink on
@@ -122,7 +122,7 @@ foreach ($instance in $SqlInstance) {
         Where-Object { $_.AutoShrink -eq $true } |
         Select-Object -ExpandProperty Name
 
-    # Databases on Simple recovery
+    # Databases on Simple recovery in prod context
     $simpleRecovery = Get-DbaDatabase -SqlInstance $instance -ExcludeSystemDb |
         Where-Object { $_.RecoveryModel -eq 'Simple' } |
         Select-Object -ExpandProperty Name
@@ -145,5 +145,7 @@ Run this across the environment to identify gaps. `DRIFT`, `OVER`, `LOW`, and `D
 
 ## See Also
 
-- [Development and Configuration Standards](BestPractices.md)
-- [Security Practices](../Security/Security.md)
+- [[Development-and-Configuration-Standards|Development and Configuration Standards]]
+- [[Dynamics-GP-Standards|Dynamics GP Standards]]
+- [[../Security/Security-Practices|Security Practices]]
+- [[Standards|Standards Index]]

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the process for applying SQL Server Cumulative Updates (CUs) across all environments. This process must be followed for all production instances regardless of CU severity.
+Define the process for applying SQL Server Cumulative Updates (CUs) across all environments. Dynamics GP version certification constraints make ad-hoc patching risky — this process must be followed for all production instances regardless of CU severity.
 
 ---
 
@@ -30,6 +30,24 @@ Test-DbaBuild -SqlInstance $instances
 
 ---
 
+## GP Compatibility Check
+
+**Required before patching any instance that hosts Dynamics GP databases (DYNAMICS or any GP company database).**
+
+1. Note the target CU build number.
+2. Open the [Microsoft Dynamics GP System Requirements](https://learn.microsoft.com/en-us/dynamics-gp/resources/system-requirements) page.
+3. Locate the GP 18.5 row and confirm the target CU is listed as certified.
+4. If the target CU is not certified:
+   - Do not apply it to any GP instance.
+   - Wait for a certified CU, or coordinate a GP upgrade cycle that includes the SQL Server patch.
+5. Document the certified build number and the date of verification in the change record.
+
+This check is not required for non-GP instances (WMS, PMA, RPT), but confirm CU compatibility with application owners for any third-party software co-located on those instances.
+
+See [[Dynamics-GP-Impact-Reference|Dynamics GP Impact Reference]] for the full list of GP constraints.
+
+---
+
 ## Change Control Gate
 
 All CU applications to production instances require:
@@ -47,7 +65,7 @@ All CU applications to production instances require:
 ### Pre-Patch Checklist
 
 - [ ] Change approval obtained and recorded
-- [ ] Third-party application compatibility verified for any co-located software
+- [ ] GP compatibility verified (ERP instances only)
 - [ ] Test instance patched and soaked for at least two weeks
 - [ ] No active user connections expected during the window
 - [ ] No SQL Agent jobs running at patch start time
@@ -121,8 +139,9 @@ Manual validation steps:
 - [ ] SQL Server service online and accepting connections
 - [ ] All user databases in ONLINE status
 - [ ] SQL Agent service running and jobs scheduled
-- [ ] Replication agents running (replication instances only)
+- [ ] Replication agents running (RPL instances only)
 - [ ] Log shipping jobs running (DR-configured instances only)
+- [ ] GP posting test — run a test transaction post in the test environment if this is an ERP instance
 
 ---
 
@@ -141,4 +160,6 @@ This is why the pre-patch `COPY_ONLY` backup is mandatory — not optional.
 
 ## Related Documents
 
-- [Backup and Restore](../Operations/BackupRestore.md) — backup procedures including `COPY_ONLY`
+- [[Dynamics-GP-Impact-Reference|Dynamics GP Impact Reference]] — GP compatibility constraints and forbidden operations
+- [[Backup-and-Restore|Backup and Restore]] — backup procedures including `COPY_ONLY`
+- [[../Index|Back to Index]]

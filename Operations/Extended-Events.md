@@ -59,15 +59,15 @@ ALTER EVENT SESSION [DBA_BlockingDetection] ON SERVER STATE = START;
 
 ```powershell
 $splatXe = @{
-    SqlInstance     = $instance
-    Session         = 'DBA_BlockingDetection'
+    SqlInstance = $instance
+    Session     = 'DBA_BlockingDetection'
     EnableException = $true
 }
 Get-DbaXESession @splatXe
 
 # Read from the target file
 $splatFile = @{
-    Path            = 'C:\XELogs\DBA_BlockingDetection*.xel'
+    Path        = 'C:\XELogs\DBA_BlockingDetection*.xel'
     EnableException = $true
 }
 Read-DbaXEFile @splatFile |
@@ -110,7 +110,7 @@ ALTER EVENT SESSION [DBA_DeadlockCapture] ON SERVER STATE = START;
 
 ```powershell
 $splatDead = @{
-    Path            = 'C:\XELogs\DBA_DeadlockCapture*.xel'
+    Path        = 'C:\XELogs\DBA_DeadlockCapture*.xel'
     EnableException = $true
 }
 Read-DbaXEFile @splatDead |
@@ -173,5 +173,6 @@ Read-DbaXEFile -Path (Get-DbaXESession @splatSh).TargetFileName |
 
 ## Related Documents
 
-- [Monitoring](Monitoring.md) — blocking detection via DMVs and sp_WhoIsActive
-- [Performance Practices](../Performance/PerformancePractices.md) — wait stats and index analysis
+- [[Monitoring|Monitoring]] — blocking detection via DMVs and sp_WhoIsActive
+- [[Performance-Practices|Performance Practices]] — wait stats and index analysis
+- [[../Index|Back to Index]]

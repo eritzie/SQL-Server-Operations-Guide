@@ -11,7 +11,7 @@ Define operational standards for managing SQL Server transactional replication e
 | Role | Description |
 |---|---|
 | **Publisher** | Source instance. Holds the publication database. Marked articles are tracked by the Log Reader Agent. |
-| **Distributor** | Intermediary. Holds the distribution database. Stores transactions between publisher and subscriber. May be co-located on the publisher or on a dedicated instance. |
+| **Distributor** | Intermediary. Holds the distribution database (`ODNRPLDIST` or similar). Stores transactions between publisher and subscriber. May be co-located on the publisher or on a dedicated instance. |
 | **Subscriber** | Destination instance. Receives replicated transactions via the Distribution Agent. |
 
 A dedicated distributor instance is preferred for production environments with high transaction volume — co-locating the distributor on the publisher adds contention on the publisher's log reader.
@@ -107,7 +107,8 @@ SELECT
 FROM [msdb].[dbo].[sysjobs]         AS j
 JOIN [msdb].[dbo].[sysjobhistory]   AS h
     ON j.[job_id] = h.[job_id]
-WHERE j.[name] LIKE '%REPL%'
+WHERE j.[name] LIKE '%LSRepl%'
+   OR j.[name] LIKE '%REPL%'
    OR j.[category_id] IN (
        SELECT [category_id]
        FROM [msdb].[dbo].[syscategories]
@@ -141,13 +142,21 @@ If log growth is unexpectedly high:
 
 ### Schema Changes on Published Tables
 
-Schema changes on published articles must be replicated to subscribers. SQL Server handles DDL replication automatically for supported changes, but some changes require manual intervention or subscription reinitialization.
+Schema changes on published articles must be replicated to subscribers. SQL Server handles DDL replication automatically for supported changes, but some changes require manual intervention or subscription reinitialzation.
 
 Before making schema changes to published tables:
 1. Confirm the change is in the list of DDL changes supported by transactional replication.
 2. Test the change on the test replication environment first.
 3. Coordinate timing with a low-latency window.
 4. Monitor agent jobs immediately after the change for errors.
+
+### GP-Specific Considerations
+
+When publisher databases contain GP company database data:
+
+- Do not publish GP tables that receive active writes during business hours (GL posting, payroll) without verifying the replication articles exclude those tables or the window is outside business hours.
+- Query `DYNAMICS.dbo.SY01500` to confirm which databases are GP company databases before modifying publication configuration.
+- See [[Dynamics-GP-Impact-Reference|Dynamics GP Impact Reference]] for the full list of GP-safe operations.
 
 ---
 
@@ -184,8 +193,8 @@ Use only if the existing snapshot is recent and subscriber schema matches:
 -- On the distributor
 EXEC [distribution].[dbo].[sp_reinitsubscription]
     @publication     = N'PublicationName',
-    @subscriber      = N'<subscriber-instance>',
-    @destination_db  = N'<subscriber-database>',
+    @subscriber      = N'SubscriberInstance',
+    @destination_db  = N'SubscriberDatabase',
     @invalidate_snapshot = 0;   -- 0 = use existing snapshot
 ```
 
@@ -226,6 +235,8 @@ ORDER BY [time] DESC;
 
 ## Related Documents
 
-- [Monitoring](Monitoring.md) — general job monitoring procedures
-- [SQL Agent Job Standards](../Standards/Agent-Job-Standards.md) — replication agent job naming and configuration
-- [Log Shipping Setup](../Disaster-Recovery/LogShipping.md) — alternative DR approach for non-published databases
+- [[Dynamics-GP-Impact-Reference|Dynamics GP Impact Reference]] — GP-safe operations on published databases
+- [[Monitoring|Monitoring]] — general job monitoring procedures
+- [[Agent-Job-Standards|SQL Agent Job Standards]] — replication agent job naming and configuration
+- [[Log-Shipping-Setup|Log Shipping Setup]] — alternative DR approach for non-published databases
+- [[../Index|Back to Index]]

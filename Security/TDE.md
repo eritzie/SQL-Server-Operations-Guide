@@ -2,7 +2,18 @@
 
 ## Purpose
 
-Document when and how to enable Transparent Data Encryption (TDE) for SQL Server databases requiring data-at-rest protection. Backup encryption is covered in [Backup and Restore](../Operations/BackupRestore.md). TDE differs from backup encryption: it encrypts the data files, log files, and backups of the protected database at the page level, making data unreadable if the physical media is removed.
+Document when and how to enable Transparent Data Encryption (TDE) for SQL Server databases requiring data-at-rest protection. Backup encryption is covered in [[Backup-and-Restore|Backup and Restore]]. TDE differs from backup encryption: it encrypts the data files, log files, and backups of the protected database at the page level, making data unreadable if the physical media is removed.
+
+---
+
+## GP Exclusion — Read First
+
+> [!WARNING]
+> Microsoft does not support Transparent Data Encryption on Dynamics GP databases. Do not enable TDE on DYNAMICS or any GP company database. Doing so will break GP and is not recoverable without disabling TDE and restoring from backup.
+
+This exclusion applies regardless of compliance requirements. Address data-at-rest requirements for GP databases through alternative controls (encrypted storage volumes, BitLocker, restricted physical access).
+
+See [[Dynamics-GP-Impact-Reference|Dynamics GP Impact Reference]] for the full list of GP-forbidden operations.
 
 ---
 
@@ -12,6 +23,7 @@ TDE is appropriate for databases that:
 
 - Contain sensitive business data (PII, financial records, credentials) where physical media theft is a risk
 - Are subject to compliance frameworks requiring encryption at rest
+- Are **not** Dynamics GP databases (DYNAMICS or any GP company database)
 
 TDE is not a substitute for access control. It protects against physical media theft — not against a compromised SQL login or OS account that can already read the data through normal SQL Server access.
 
@@ -32,8 +44,6 @@ CREATE MASTER KEY ENCRYPTION BY PASSWORD = 'UseAStrongPasswordHere';
 Verify:
 
 ```sql
-SET NOCOUNT ON;
-
 SELECT [name], [is_master_key_encrypted_by_server]
 FROM [sys].[symmetric_keys]
 WHERE [name] = '##MS_DatabaseMasterKey##';
@@ -147,5 +157,7 @@ CREATE CERTIFICATE TDE_Cert
 
 ## Related Documents
 
-- [Security](Security.md) — general security hardening and access control
-- [Backup and Restore](../Operations/BackupRestore.md) — backup encryption (separate from TDE)
+- [[Security-Practices|Security Practices]] — general security hardening and access control
+- [[Backup-and-Restore|Backup and Restore]] — backup encryption (separate from TDE)
+- [[Dynamics-GP-Impact-Reference|Dynamics GP Impact Reference]] — TDE exclusion for GP databases
+- [[../Index|Back to Index]]

@@ -68,7 +68,7 @@ WHERE [CommandType] = 'DBCC_CHECKDB'
 ORDER BY [StartTime] DESC;
 ```
 
-See [Ola Hallengren Maintenance Solution](Maintenance-Solution.md) for installation and SQL Agent job setup.
+See [[Maintenance-Solution|Ola Hallengren Maintenance Solution]] for installation and SQL Agent job setup.
 
 ---
 
@@ -209,6 +209,7 @@ If the job has not run in more than 10 days, or the last run outcome is not `Suc
 
 ## Related Documents
 
-- [Ola Hallengren Maintenance Solution](Maintenance-Solution.md) — DatabaseIntegrityCheck setup and scheduling
-- [Backup and Restore](BackupRestore.md) — RESTORE PAGE and point-in-time restore procedures
-- [Monitoring](Monitoring.md) — DBCC CHECKDB status across instances
+- [[Maintenance-Solution|Ola Hallengren Maintenance Solution]] — DatabaseIntegrityCheck setup and scheduling
+- [[Backup-and-Restore|Backup and Restore]] — RESTORE PAGE and point-in-time restore procedures
+- [[../Operations/Monitoring|Monitoring]] — DBCC CHECKDB status across instances
+- [[Operations|Back to Operations]]
